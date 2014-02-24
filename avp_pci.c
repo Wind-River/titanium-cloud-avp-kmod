@@ -783,11 +783,19 @@ avp_pci_remove(struct pci_dev *dev)
 	kfree(avp_dev);
 }
 
+static void
+avp_pci_shutdown(struct pci_dev *dev)
+{
+    /* shutdown the device on reboot or shutdown */
+    avp_pci_remove(dev);
+}
+
 static struct pci_driver avp_pci_driver = {
 	.name = "wrs_avp",
 	.id_table = avp_pci_ids,
 	.probe = avp_pci_probe,
 	.remove = avp_pci_remove,
+	.shutdown = avp_pci_shutdown,
 };
 
 int __init
