@@ -236,7 +236,8 @@ struct wrs_avp_memmap_info {
 
 /**@{  AVP device map versions */
 #define WRS_AVP_DEVICE_VERSION_1 1
-#define WRS_AVP_DEVICE_VERSION WRS_AVP_DEVICE_VERSION_1
+#define WRS_AVP_DEVICE_VERSION_2 2
+#define WRS_AVP_DEVICE_VERSION WRS_AVP_DEVICE_VERSION_2
 /**@} */
 
 /*
