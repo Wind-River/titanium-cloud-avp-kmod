@@ -43,7 +43,7 @@
 #define WRS_AVP_KTHREAD_RESCHEDULE_INTERVAL (1)
 
 /* Defines the maximum number of queues assigned to a receive thread */
-#define WRS_AVP_KTHREAD_MAX_RX_QUEUES (32)
+#define WRS_AVP_KTHREAD_MAX_RX_QUEUES (128)
 
 /* Defines the maximum number of data buffers stored in the Tx cache */
 #define WRS_AVP_QUEUE_MBUF_CACHE_SIZE (32)
