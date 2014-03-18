@@ -45,9 +45,6 @@ extern int avp_dev_create(struct wrs_avp_device_info *dev_info,
 extern int avp_dev_detach(struct avp_dev *avp);
 extern int avp_dev_release(uint64_t device_id);
 
-/* Utility functions from avp_net.c */
-extern int avp_net_announce(struct net_device *dev);
-
 /* Defines the default number of characters allowed in an MSI-X vector name */
 #define WRS_AVP_PCI_MSIX_NAME_LEN 64
 
@@ -359,11 +356,6 @@ avp_pci_attach(struct work_struct *work)
 	avp = avp_pci_dev->avp;
 	BUG_ON(!avp);
 	BUG_ON(!avp->net_dev);
-	ret = avp_net_announce(avp->net_dev);
-	if (ret < 0) {
-		AVP_ERR("Failed to send RARP announcement, ret=%d\n", ret);
-		/* not a critical failure */
-	}
 
 done:
 	/* acknowledge that we have changed our state */

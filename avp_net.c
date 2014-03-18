@@ -392,33 +392,6 @@ avp_net_rebuild_header(struct sk_buff *skb)
 	return 0;
 }
 
-/*
- *	Sends out a RARP message to advertise our presence on the network.
- */
-int
-avp_net_announce(struct net_device *dev)
-{
-	struct sk_buff *skb;
-	int ret;
-
-	skb = arp_create(ARPOP_RREQUEST, ETH_P_RARP, 0, dev, 0,
-					 NULL, dev->dev_addr, dev->dev_addr);
-	if (skb == NULL) {
-		return -ENOMEM;
-	}
-
-	/*
-	 * We are disabling preemption here because we are circumventing the stack
-	 * and going directly to the device transmit function in order to avoid
-	 * link state checks.  Normally avp_net_tx() would get invoked with
-	 * preemption disabled.
-	 */
-	preempt_disable();
-	ret = avp_net_tx(skb, dev);
-	preempt_enable_no_resched();
-
-	return (ret == NETDEV_TX_OK ? 0 : -1);
-}
 
 static const struct header_ops avp_net_header_ops = {
 	.create	 = avp_net_header,
