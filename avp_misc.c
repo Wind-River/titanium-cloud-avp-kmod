@@ -71,7 +71,7 @@ extern int avp_pci_exit(void);
 #define WRS_AVP_DEV_IN_USE_BIT_NUM 0
 
 /* Indicates that the module is inuse by a user of /dev/avp */
-static volatile unsigned long device_in_use;
+unsigned long device_in_use;
 
 /* AVP kernel threads */
 static char *kthread_cpulist = NULL;
@@ -86,6 +86,8 @@ static struct list_head avp_list_head = LIST_HEAD_INIT(avp_list_head);
 static DECLARE_RWSEM(avp_poll_lock);
 static struct list_head avp_poll_head = LIST_HEAD_INIT(avp_poll_head);
 
+/* AVP device semaphore to prevent control requests during IOCTL requests */
+DECLARE_RWSEM(avp_control_lock);
 
 /*****************************************************************************
  *
@@ -550,6 +552,14 @@ avp_dev_create(struct wrs_avp_device_info *dev_info, struct avp_dev **avpptr)
 		}
 
 		avp->guest = dev_info->guest;
+		if (!avp->guest) {
+			/*
+			 * Assert that an IOCTL request is in progress on this device to
+			 * prevent it from sending up control requests which would result
+			 * in a deadlock.
+			 */
+			set_bit(WRS_AVP_IOCTL_IN_PROGRESS_BIT_NUM, &avp->ioctl_in_progress);
+		}
 		memcpy(avp->ethaddr, dev_info->ethaddr, ETH_ALEN);
 		reused = 0;
 	}
@@ -559,6 +569,7 @@ avp_dev_create(struct wrs_avp_device_info *dev_info, struct avp_dev **avpptr)
 		reused = 1;
 		AVP_INFO("attaching netdev %s to new device 0x%llx\n",
 				 net_dev->name, dev_info->device_id);
+		clear_bit(WRS_AVP_IOCTL_IN_PROGRESS_BIT_NUM, &avp->ioctl_in_progress);
 	}
 
 	/* the device id can change during migration */
@@ -567,8 +578,7 @@ avp_dev_create(struct wrs_avp_device_info *dev_info, struct avp_dev **avpptr)
 	ret = avp_dev_configure(avp, dev_info);
 	if (ret < 0) {
 		AVP_ERR("failed to configure device 0x%llx\n", dev_info->device_id);
-		avp_dev_free(avp);
-		return ret;
+        goto cleanup;
 	}
 
 	if (!reused) {
@@ -576,9 +586,10 @@ avp_dev_create(struct wrs_avp_device_info *dev_info, struct avp_dev **avpptr)
 		if (ret) {
 			AVP_ERR("error %i registering device 0x%llx\n",
 					ret, dev_info->device_id);
-			avp_dev_free(avp);
-			return -ENODEV;
+			ret = -ENODEV;
+			goto cleanup;
 		}
+
 		AVP_INFO("registered netdev %s for device 0x%llx\n",
 				 net_dev->name, dev_info->device_id);
 
@@ -606,38 +617,21 @@ avp_dev_create(struct wrs_avp_device_info *dev_info, struct avp_dev **avpptr)
 	if (avpptr)
 		(*avpptr) = avp;
 
+	clear_bit(WRS_AVP_IOCTL_IN_PROGRESS_BIT_NUM, &avp->ioctl_in_progress);
+
 	return 0;
+
+cleanup:
+	clear_bit(WRS_AVP_IOCTL_IN_PROGRESS_BIT_NUM, &avp->ioctl_in_progress);
+	avp_dev_free(avp);
+	return ret;
 }
 
-int
-avp_dev_release(uint64_t device_id)
+static int
+_avp_dev_release(struct avp_dev *dev)
 {
-	struct avp_dev *dev;
-
-	dev = avp_dev_find(device_id);
-	if (dev == NULL) {
-		AVP_ERR("no device found for id 0x%llx\n", device_id);
-		return -ENODEV;
-	}
-
-	if (dev->guest) {
-		/*
-		 * Inform the host that we are shutting down. We do not do this if
-		 * running directly on the host because the request comes in from the
-		 * host itself therefore it does not need to be told... and because it
-		 * can't service the shutdown request message if it is waiting for us
-		 * to release (deadlock)
-		 */
-		avp_ctrl_shutdown(dev);
-	}
-	else {
-		/*
-		 * Mark this device as released so that we understand that we should
-		 * not send any requests to the host because that will lead to
-		 * deadlock.
-		 */
-		dev->status = WRS_AVP_DEV_STATUS_RELEASED;
-	}
+	/* Inform the host that we are shutting down. */
+	avp_ctrl_shutdown(dev);
 
 	/* unassign from receive threads */
 	avp_thread_dev_remove(dev);
@@ -656,6 +650,20 @@ avp_dev_release(uint64_t device_id)
 	up_write(&avp_list_lock);
 
 	return 0;
+}
+
+int
+avp_dev_release(uint64_t device_id)
+{
+	struct avp_dev *dev;
+
+	dev = avp_dev_find(device_id);
+	if (dev == NULL) {
+		AVP_ERR("no device found for id 0x%llx\n", device_id);
+		return -ENODEV;
+	}
+
+	return _avp_dev_release(dev);
 }
 
 
@@ -686,11 +694,11 @@ avp_ioctl_create(unsigned int ioctl_num, unsigned long ioctl_param)
 	return avp_dev_create(&dev_info, NULL);
 }
 
-
 static int
 avp_ioctl_release(unsigned int ioctl_num, unsigned long ioctl_param)
 {
 	struct wrs_avp_device_info dev_info;
+	struct avp_dev *dev;
 	int ret = -EINVAL;
 
 	if (_IOC_SIZE(ioctl_num) > sizeof(dev_info))
@@ -703,8 +711,25 @@ avp_ioctl_release(unsigned int ioctl_num, unsigned long ioctl_param)
 		return -EIO;
 	}
 
+	/* lookup device */
+	dev = avp_dev_find(dev_info.device_id);
+	if (dev == NULL) {
+		AVP_ERR("device 0x%llx not found\n", dev_info.device_id);
+		return -ENODEV;
+	}
+
+	/*
+	 * Assert that an IOCTL request is in progress on this device to prevent
+	 * it from sending up control requests which would result in a deadlock.
+	 */
+	set_bit(WRS_AVP_IOCTL_IN_PROGRESS_BIT_NUM, &dev->ioctl_in_progress);
+
 	/* delete device */
-	return avp_dev_release(dev_info.device_id);
+	ret = _avp_dev_release(dev);
+
+	clear_bit(WRS_AVP_IOCTL_IN_PROGRESS_BIT_NUM, &dev->ioctl_in_progress);
+
+	return ret;
 }
 
 static int
@@ -757,6 +782,18 @@ avp_ioctl(struct inode *inode,
 
 	AVP_DBG("IOCTL num=0x%0x param=0x%0lx \n", ioctl_num, ioctl_param);
 
+	/*
+	 * Acquire the control lock to ensure that no other non-ioctl users can
+	 * start sending a control request up to the vswitch.  If they were to be
+	 * able to send up a request while we were doing an ioctl then that could
+	 * lead to deadlock.
+	 */
+	ret = down_write_trylock(&avp_control_lock);
+	if (ret == 0) {
+		AVP_INFO("Rejecting AVP ioctl request while control lock is held\n");
+		return -EBUSY;
+	}
+
 	switch (_IOC_NR(ioctl_num)) {
 	case _IOC_NR(WRS_AVP_IOCTL_CREATE):
 		ret = avp_ioctl_create(ioctl_num, ioctl_param);
@@ -771,6 +808,8 @@ avp_ioctl(struct inode *inode,
 		AVP_ERR("unknown IOCTL number %u\n", _IOC_NR(ioctl_num));
 		break;
 	}
+
+	up_write(&avp_control_lock);
 
 	return ret;
 }

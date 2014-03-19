@@ -69,8 +69,10 @@ struct avp_stats {
 /** AVP device internal states */
 #define WRS_AVP_DEV_STATUS_UNKNOWN 0
 #define WRS_AVP_DEV_STATUS_OK 1
-#define WRS_AVP_DEV_STATUS_RELEASED 2
-#define WRS_AVP_DEV_STATUS_DETACHED 3
+#define WRS_AVP_DEV_STATUS_DETACHED 2
+
+/* Defines the device ioctl in progress flag */
+#define WRS_AVP_IOCTL_IN_PROGRESS_BIT_NUM 0
 
 /**
  * A structure to hold per-cpu cache of allocated mbufs
@@ -99,6 +101,9 @@ struct avp_dev {
 
 	/* unique system identifier */
 	uint64_t device_id;
+
+    /* whether an IOCTL request is in progress on this device */
+    volatile unsigned long ioctl_in_progress;
 
 	/* current device status */
 	int status;

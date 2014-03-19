@@ -86,10 +86,7 @@ avp_net_release(struct net_device *dev)
 
 	netif_tx_stop_all_queues(dev);
 
-	if (avp->status != WRS_AVP_DEV_STATUS_RELEASED)
-		return avp_ctrl_set_link_state(avp, 0);
-	else
-		return 0;
+	return avp_ctrl_set_link_state(avp, 0);
 }
 
 static int

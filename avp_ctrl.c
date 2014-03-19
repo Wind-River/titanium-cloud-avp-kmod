@@ -40,6 +40,8 @@
 /* Control request response timeout in milliseconds */
 #define WRS_AVP_CTRL_RESPONSE_TIMEOUT 500
 
+extern struct rw_semaphore avp_control_lock;
+
 int
 avp_ctrl_set_link_state(struct avp_dev *avp, unsigned state)
 {
@@ -106,7 +108,8 @@ avp_ctrl_poll_resp(struct avp_dev *avp)
 }
 
 int
-avp_ctrl_process_request(struct avp_dev *avp, struct wrs_avp_request *req)
+avp_ctrl_process_request(struct avp_dev *avp,
+                         struct wrs_avp_request *req)
 {
 	int ret = -1;
 	void *resp_va;
@@ -118,10 +121,27 @@ avp_ctrl_process_request(struct avp_dev *avp, struct wrs_avp_request *req)
 		return -EINVAL;
 	}
 
+	if (test_bit(WRS_AVP_IOCTL_IN_PROGRESS_BIT_NUM, &avp->ioctl_in_progress)) {
+		/*
+		 * we are running this request from ioctl context so do not send a
+		 * request to the vswitch since it will lead to deadlock; both because
+		 * we would deadlock on avp_control_lock and because vswitch wouldn't
+		 * respond if we also deadlocked on rtnl_lock() (see register_netdev())
+		 */
+		AVP_DBG("not sending control request during IOCTL, req=%u\n",
+				req->req_id);
+		req->result = 0;
+		return 0;
+	}
+
+	/* prevent any new IOCTL operations from starting */
+	down_read(&avp_control_lock);
+
+	/* prevent any other processes from touching the sync_kva area */
+	mutex_lock(&avp->sync_lock);
+
 	req->result = -ENOTSUPP;
 	AVP_DBG("Sending request %u\n", req->req_id);
-
-	mutex_lock(&avp->sync_lock);
 
 	/* Discard any stale responses before starting a new request */
 	while (avp_fifo_get(avp->resp_q, (void**)&resp_va, 1)) {
@@ -134,34 +154,42 @@ avp_ctrl_process_request(struct avp_dev *avp, struct wrs_avp_request *req)
 	if (num < 1) {
 		AVP_ERR("Cannot send to req_q\n");
 		ret = -EBUSY;
-		goto fail;
+		goto unlock;
 	}
 
-	retry = 1;
+	retry = 2;
 	do {
+		AVP_DBG("Waiting for request %u, retry=%u\n", req->req_id, retry);
 		ret = wait_event_interruptible_timeout(
 				  avp->wq,
 				  avp_fifo_count(avp->resp_q),
 				  msecs_to_jiffies(WRS_AVP_CTRL_RESPONSE_TIMEOUT));
-	} while (ret <= 0 && retry--);
+	} while (ret == 0 && retry--);
 
-	if (signal_pending(current) || ret <= 0) {
-		AVP_ERR("No response to request %u, ret=%d\n", req->req_id, ret);
-		ret = -ETIME;
-		goto fail;
+	if (signal_pending(current) || (ret < 0)) {
+		AVP_ERR("Interrupted while waiting for request %u, ret=%d\n",
+				req->req_id, ret);
+		ret = -ERESTARTSYS;
+		goto unlock;
 	}
 
-	AVP_DBG("Response received for %u after %lu/%lu jiffies\n",
+	if ((ret == 0) && !avp_fifo_count(avp->resp_q)) {
+		AVP_ERR("No response to request %u\n", req->req_id);
+		ret = -ETIME;
+		goto unlock;
+	}
+
+	AVP_DBG("Response received for %u after %lu/%lu jiffies, retry=%u\n",
 			req->req_id,
 			msecs_to_jiffies(WRS_AVP_CTRL_RESPONSE_TIMEOUT) - ret,
-			msecs_to_jiffies(WRS_AVP_CTRL_RESPONSE_TIMEOUT));
+			msecs_to_jiffies(WRS_AVP_CTRL_RESPONSE_TIMEOUT), retry);
 
 	num = avp_fifo_get(avp->resp_q, (void **)&resp_va, 1);
 	if (num != 1 || resp_va != avp->sync_va) {
 		/* This should never happen */
 		AVP_ERR("No data in resp_q\n");
 		ret = -ENODATA;
-		goto fail;
+		goto unlock;
 	}
 
 	memcpy(req, avp->sync_kva, sizeof(struct wrs_avp_request));
@@ -170,7 +198,8 @@ avp_ctrl_process_request(struct avp_dev *avp, struct wrs_avp_request *req)
 	AVP_DBG("Result %d received for request %u\n",
 			req->result, req->req_id);
 
-fail:
+unlock:
 	mutex_unlock(&avp->sync_lock);
+	up_read(&avp_control_lock);
 	return ret;
 }
