@@ -96,6 +96,7 @@ struct wrs_avp_device_config {
     uint32_t features; /**< Negotiated features */
 	uint16_t num_tx_queues; /**< Number of active transmit queues */
 	uint16_t num_rx_queues; /**< Number of active receive queues */
+    uint8_t if_up; /**< 1: interface up, 0: interface down */
 } __attribute__((packed));
 
 /*
@@ -237,7 +238,8 @@ struct wrs_avp_memmap_info {
 /**@{  AVP device map versions */
 #define WRS_AVP_DEVICE_VERSION_1 1
 #define WRS_AVP_DEVICE_VERSION_2 2
-#define WRS_AVP_DEVICE_VERSION WRS_AVP_DEVICE_VERSION_2
+#define WRS_AVP_DEVICE_VERSION_3 3
+#define WRS_AVP_DEVICE_VERSION WRS_AVP_DEVICE_VERSION_3
 /**@} */
 
 /*

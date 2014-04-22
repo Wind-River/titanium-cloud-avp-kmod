@@ -282,25 +282,20 @@ avp_pci_create(struct pci_dev *dev,
 		return ret;
 	}
 
+	netdev = avp_dev->avp->net_dev;
+
 	/* setup current device configuration */
 	memset(&dev_config, 0, sizeof(dev_config));
 	dev_config.device_id = info->device_id;
 	dev_config.features = 0; /* future */
 	dev_config.num_tx_queues = avp_dev->avp->num_tx_queues;
 	dev_config.num_rx_queues = avp_dev->avp->num_rx_queues;
+    dev_config.if_up = !!(netdev->flags & IFF_UP);
 
 	/* inform the device of negotiated values */
 	ret = avp_ctrl_set_config(avp_dev->avp, &dev_config);
 	if (ret < 0) {
 		AVP_ERR("Failed to set device configuration, ret=%d\n", ret);
-		goto release_device;
-	}
-
-	/* inform the device of current link state */
-	netdev = avp_dev->avp->net_dev;
-	ret = avp_ctrl_set_link_state(avp_dev->avp, !!(netdev->flags & IFF_UP));
-	if (ret < 0) {
-		AVP_ERR("Failed to set device link state, ret=%d\n", ret);
 		goto release_device;
 	}
 
