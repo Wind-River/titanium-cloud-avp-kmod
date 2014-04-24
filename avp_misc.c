@@ -40,6 +40,7 @@
 #include <linux/percpu.h>
 #include <linux/bottom_half.h>
 #include <linux/rtnetlink.h>
+#include <linux/sched.h>
 
 #include <exec-env/wrs_avp_common.h>
 #include "avp_dev.h"
@@ -122,6 +123,10 @@ avp_thread_process(void *arg)
 	unsigned busy;
 	unsigned i;
 	unsigned q;
+	
+	/* bump our priority to same as ksoftirqd */
+	struct sched_param param = { .sched_priority = 1 };
+	sched_setscheduler(current, SCHED_RR, &param);
 
 	while (!kthread_should_stop()) {
 		i = 0;
