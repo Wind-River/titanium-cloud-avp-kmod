@@ -123,7 +123,7 @@ avp_thread_process(void *arg)
 	unsigned busy;
 	unsigned i;
 	unsigned q;
-	
+
 	/* bump our priority to same as ksoftirqd */
 	struct sched_param param = { .sched_priority = 1 };
 	sched_setscheduler(current, SCHED_RR, &param);
@@ -418,6 +418,7 @@ restart:
 int
 avp_dev_configure(struct avp_dev *avp, struct wrs_avp_device_info *dev_info)
 {
+    struct avp_mempool_info *pool;
 	unsigned i;
 
 	/* adjust max values */
@@ -469,6 +470,15 @@ avp_dev_configure(struct avp_dev *avp, struct wrs_avp_device_info *dev_info)
 	avp->resp_q = phys_to_virt(dev_info->resp_phys);
 	avp->sync_va = dev_info->sync_va;
 	avp->sync_kva = phys_to_virt(dev_info->sync_phys);
+
+	for (i = 0; i < WRS_AVP_MAX_MEMPOOLS; i++) {
+		pool = &avp->pool[i];
+		pool->va = dev_info->pool[i].addr;
+		pool->kva = phys_to_virt(dev_info->pool[i].phys_addr);
+		pool->length = dev_info->pool[i].length;
+		AVP_DBG("pool[%u]: mbuf_phys:  0x%016llx, mbuf_kva: 0x%p\n",
+				(unsigned long long) dev_info->pool[i].phys_addr, pool->kva);
+	}
 
 	avp->mbuf_kva = phys_to_virt(dev_info->mbuf_phys);
 	avp->mbuf_va = dev_info->mbuf_va;

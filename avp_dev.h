@@ -83,6 +83,15 @@ struct avp_mbuf_cache {
 } ____cacheline_internodealigned_in_smp;
 
 /**
+ * A structure describing the translation parameters for each pool
+ */
+struct avp_mempool_info {
+    void *va; /**< host virtual address */
+    void *kva; /**< kernel virtual address */
+    size_t length; /**< region length in bytes */
+};
+
+/**
  * A structure describing the private information for a avp device.
  */
 
@@ -142,6 +151,9 @@ struct avp_dev {
 	void *resp_q;
 	void *sync_kva;
 	void *sync_va;
+
+    /* per-socket mbuf pools */
+    struct avp_mempool_info pool[WRS_AVP_MAX_MEMPOOLS];
 
 	/* data buffer address references */
 	void *mbuf_kva;

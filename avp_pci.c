@@ -255,6 +255,7 @@ avp_pci_create(struct pci_dev *dev,
 	struct wrs_avp_device_info *info;
 	struct net_device *netdev;
 	unsigned long addr;
+    unsigned i;
 	int ret;
 
 	addr = pci_resource_start(dev, WRS_AVP_PCI_DEVICE_BAR);
@@ -275,6 +276,13 @@ avp_pci_create(struct pci_dev *dev,
 	dev_info->resp_phys = avp_pci_translate_address(avp_dev, info->resp_phys);
 	dev_info->sync_phys = avp_pci_translate_address(avp_dev, info->sync_phys);
 	dev_info->mbuf_phys = avp_pci_translate_address(avp_dev, info->mbuf_phys);
+
+	for (i = 0; i < WRS_AVP_MAX_MEMPOOLS; i++) {
+		if (info->pool[i].phys_addr != 0) {
+			dev_info->pool[i].phys_addr =
+				avp_pci_translate_address(avp_dev, info->pool[i].phys_addr);
+		}
+	}
 
 	/* create the actual device using the translated addresses */
 	ret = avp_dev_create(dev_info, &avp_dev->avp);

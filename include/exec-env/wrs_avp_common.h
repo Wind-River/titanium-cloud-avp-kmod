@@ -239,8 +239,21 @@ struct wrs_avp_memmap_info {
 #define WRS_AVP_DEVICE_VERSION_1 1
 #define WRS_AVP_DEVICE_VERSION_2 2
 #define WRS_AVP_DEVICE_VERSION_3 3
-#define WRS_AVP_DEVICE_VERSION WRS_AVP_DEVICE_VERSION_3
+#define WRS_AVP_DEVICE_VERSION_4 4
+#define WRS_AVP_DEVICE_VERSION WRS_AVP_DEVICE_VERSION_4
 /**@} */
+
+/* defines the number of mbuf pools supported per devices (1 per socket) */
+#define WRS_AVP_MAX_MEMPOOLS 2
+
+/*
+ * Defines address translation parameters for each support mbuf pool
+ */
+struct wrs_avp_mempool_info {
+	void * addr;
+	phys_addr_t phys_addr;
+	uint64_t length;
+};
 
 /*
  * Struct used to create a AVP device. Passed to the kernel in IOCTL call or
@@ -276,9 +289,12 @@ struct wrs_avp_device_info {
 	phys_addr_t sync_phys;
 	void * sync_va;
 
-	/* mbuf mempool */
+	/* mbuf mempool (used when a single memory area is supported) */
 	void * mbuf_va;
 	phys_addr_t mbuf_phys;
+
+	/* mbuf mempools */
+	struct wrs_avp_mempool_info pool[WRS_AVP_MAX_MEMPOOLS];
 
 #ifdef __KERNEL__
     /* Ethernet info */

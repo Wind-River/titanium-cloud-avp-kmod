@@ -98,6 +98,24 @@ avp_net_config(struct net_device *dev, struct ifmap *map)
 	return 0;
 }
 
+static inline void *
+avp_net_translate_buffer(struct avp_dev *avp, void *addr)
+{
+	struct avp_mempool_info *pool = &avp->pool[0];
+
+	if (likely((addr >= pool->va) && (addr < (pool->va + pool->length)))) {
+		return addr - pool->va + pool->kva;
+	} else {
+		pool = &avp->pool[1];
+		if (likely((addr >= pool->va) && (addr < (pool->va + pool->length)))) {
+			return addr - pool->va + pool->kva;
+		}
+	}
+
+	BUG_ON(0);
+	return NULL;
+}
+
 int
 avp_net_rx(struct avp_dev *avp, unsigned qnum)
 {
@@ -112,8 +130,6 @@ avp_net_rx(struct avp_dev *avp, unsigned qnum)
 	struct avp_stats *stats = this_cpu_ptr(avp->stats);
 	struct wrs_avp_fifo *rx_q = avp->rx_q[qnum];
 	struct wrs_avp_fifo *free_q = avp->free_q[qnum];
-	void *mbuf_kva = avp->mbuf_kva;
-	void *mbuf_va = avp->mbuf_va;
 
 	/* Get the number of entries in rx_q */
 	num_rq = avp_fifo_count(rx_q);
@@ -141,12 +157,12 @@ avp_net_rx(struct avp_dev *avp, unsigned qnum)
 
 		/* prefetch next entry while process current one */
 		if (i < num-1) {
-			pkt_buf = (void *)avp_bufs[i+1] - mbuf_va + mbuf_kva;
+			pkt_buf = avp_net_translate_buffer(avp, (void*)avp_bufs[i+1]);
 			prefetch(pkt_buf);
 		}
 
-		pkt_buf = (void *)avp_bufs[i] - mbuf_va + mbuf_kva;
-		pkt_data = pkt_buf->data - mbuf_va + mbuf_kva;
+		pkt_buf = avp_net_translate_buffer(avp, (void*)avp_bufs[i]);
+		pkt_data = avp_net_translate_buffer(avp, pkt_buf->data);
 		pkt_len = pkt_buf->data_len;
 
 		skb = __dev_alloc_skb(pkt_len + NET_IP_ALIGN, GFP_ATOMIC);
@@ -195,8 +211,6 @@ avp_net_tx(struct sk_buff *skb, struct net_device *dev)
 	struct avp_mbuf_cache *mbuf_cache;
 	struct wrs_avp_mbuf *pkt_kva = NULL;
 	struct wrs_avp_mbuf *pkt_va = NULL;
-	void * mbuf_kva = avp->mbuf_kva;
-	void * mbuf_va = avp->mbuf_va;
 	struct wrs_avp_fifo *tx_q;
 	struct wrs_avp_fifo *alloc_q;
 	void *data_kva;
@@ -241,14 +255,14 @@ avp_net_tx(struct sk_buff *skb, struct net_device *dev)
 		}
 		mbuf_cache->count = num;
 		for (i = 0; i < num; i++) {
-			pkt_kva = (void *)mbuf_cache->mbufs[i] - mbuf_va + mbuf_kva;
+			pkt_kva = avp_net_translate_buffer(avp, (void *)mbuf_cache->mbufs[i]);
 			prefetch(pkt_kva);
 		}
 	}
 
 	pkt_va = mbuf_cache->mbufs[--mbuf_cache->count];
-	pkt_kva = (void *)pkt_va - mbuf_va + mbuf_kva;
-	data_kva = pkt_kva->data - mbuf_va + mbuf_kva;
+	pkt_kva = avp_net_translate_buffer(avp, (void *)pkt_va);
+	data_kva = avp_net_translate_buffer(avp, pkt_kva->data);
 
 	len = skb->len;
 	memcpy(data_kva, skb->data, len);
