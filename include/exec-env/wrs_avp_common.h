@@ -88,11 +88,19 @@ enum wrs_avp_req_id {
 	WRS_AVP_REQ_MAX,
 };
 
+/**@{ AVP device driver types */
+#define WRS_AVP_DRIVER_TYPE_UNKNOWN 0
+#define WRS_AVP_DRIVER_TYPE_DPDK 1
+#define WRS_AVP_DRIVER_TYPE_KERNEL 2
+#define WRS_AVP_DRIVER_TYPE_QEMU 3
+/**@} */
+
 /*
  * Structure for AVP queue configuration query request/result
  */
 struct wrs_avp_device_config {
 	uint64_t device_id;  /**< Unique system identifier */
+    uint32_t driver_type; /**< Device Driver type */
     uint32_t features; /**< Negotiated features */
 	uint16_t num_tx_queues; /**< Number of active transmit queues */
 	uint16_t num_rx_queues; /**< Number of active receive queues */
@@ -241,7 +249,8 @@ struct wrs_avp_memmap_info {
 #define WRS_AVP_DEVICE_VERSION_2 2
 #define WRS_AVP_DEVICE_VERSION_3 3
 #define WRS_AVP_DEVICE_VERSION_4 4
-#define WRS_AVP_DEVICE_VERSION WRS_AVP_DEVICE_VERSION_4
+#define WRS_AVP_DEVICE_VERSION_5 5
+#define WRS_AVP_DEVICE_VERSION WRS_AVP_DEVICE_VERSION_5
 /**@} */
 
 /* defines the number of mbuf pools supported per devices (1 per socket) */
