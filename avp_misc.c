@@ -484,6 +484,7 @@ avp_dev_configure(struct avp_dev *avp, struct wrs_avp_device_info *dev_info)
 	avp->mbuf_va = dev_info->mbuf_va;
 
 	avp->mbuf_size = dev_info->mbuf_size;
+	avp->max_rx_pkt_len = dev_info->max_rx_pkt_len;
 
 	AVP_DBG("tx_phys:	   0x%016llx, tx_q addr:	  0x%p\n",
 		(unsigned long long) dev_info->tx_phys, avp->tx_q[0]);

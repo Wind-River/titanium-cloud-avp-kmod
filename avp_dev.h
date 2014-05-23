@@ -29,6 +29,8 @@
 #include <linux/if.h>
 #include <linux/wait.h>
 #include <linux/sched.h>
+#include <linux/ratelimit.h>
+#include <linux/printk.h>
 #include <linux/netdevice.h>
 #include <linux/spinlock.h>
 #include <linux/list.h>
@@ -162,6 +164,9 @@ struct avp_dev {
 	/* mbuf size */
 	unsigned mbuf_size;
 
+	/* maximum receive unit */
+	unsigned max_rx_pkt_len;
+
 	/* current rx/tx queue counts */
 	unsigned num_rx_queues;
 	unsigned max_rx_queues;
@@ -192,6 +197,7 @@ struct avp_thread {
 	struct avp_dev_rx_queue rx_queues[WRS_AVP_KTHREAD_MAX_RX_QUEUES];
 };
 
+#define AVP_ERR_RATELIMIT(args...) printk_ratelimited(KERN_ERR "AVP: Error: " args)
 #define AVP_ERR(args...) printk(KERN_ERR "AVP: Error: " args)
 #define AVP_INFO(args...) printk(KERN_DEBUG "AVP: " args)
 #define AVP_PRINT(args...) printk(KERN_DEBUG "AVP: " args)

@@ -2,7 +2,7 @@
  * GPL LICENSE SUMMARY
  *
  *   Copyright(c) 2010-2013 Intel Corporation. All rights reserved.
- *   Copyright(c) 2013-2014 Intel Corporation. All rights reserved.
+ *   Copyright(c) 2013-2014 Wind River Systems, Inc. All rights reserved.
  *
  *   This program is free software; you can redistribute it and/or modify
  *   it under the terms of version 2 of the GNU General Public License as
@@ -116,6 +116,47 @@ avp_net_translate_buffer(struct avp_dev *avp, void *addr)
 	return NULL;
 }
 
+/*
+ * Copies data from a set of mbufs to an SKB.  This function assumes that the
+ * SKB has been allocated with a sufficient amount of space to contain the
+ * entire packet.
+ */
+static inline int
+avp_net_copy_from_mbufs(struct avp_dev *avp,
+						struct wrs_avp_mbuf *pkt_kva,
+						struct sk_buff *skb)
+{
+	struct wrs_avp_mbuf *next_va;
+	size_t offset = 0;
+	void *data_kva;
+	int ret;
+
+	/* setup the SKB to the proper length */
+	skb_put(skb, pkt_kva->pkt_len);
+
+	do {
+		/* translate the host buffer to guest addressing */
+		data_kva = avp_net_translate_buffer(avp, (void*)pkt_kva->data);
+
+		ret = skb_store_bits(skb, offset, data_kva, pkt_kva->data_len);
+		if (ret) {
+			AVP_ERR_RATELIMIT("skb->len=%u, offset=%zu, data_len=%u\n",
+                              skb->len, offset, pkt_kva->data_len);
+			return ret;
+		}
+
+		/* advance to the next segment */
+		offset += pkt_kva->data_len;
+		next_va = pkt_kva->next;
+		if (next_va) {
+			pkt_kva = avp_net_translate_buffer(avp, (void*)next_va);
+		}
+
+	} while (next_va);
+
+	return 0;
+}
+
 int
 avp_net_rx(struct avp_dev *avp, unsigned qnum)
 {
@@ -123,7 +164,6 @@ avp_net_rx(struct avp_dev *avp, unsigned qnum)
 	unsigned i, num, num_rq, num_fq;
 	struct wrs_avp_mbuf *avp_bufs[WRS_AVP_MBUF_BURST_SZ];
 	struct wrs_avp_mbuf *pkt_buf;
-	void *pkt_data;
 	uint32_t pkt_len;
 	struct sk_buff *skb;
 	struct net_device *dev = avp->net_dev;
@@ -161,10 +201,15 @@ avp_net_rx(struct avp_dev *avp, unsigned qnum)
 			prefetch(pkt_buf);
 		}
 
+		/* peek in to the first mbuf to determine total length */
 		pkt_buf = avp_net_translate_buffer(avp, (void*)avp_bufs[i]);
-		pkt_data = avp_net_translate_buffer(avp, pkt_buf->data);
-		pkt_len = pkt_buf->data_len;
+		pkt_len = pkt_buf->pkt_len;
 
+		/*
+		 * Allocate an skb of the full packet length to avoid having to deal
+		 * with paged skb handling (until we determine if there is a
+		 * performance impact of doing it this way)
+		 */
 		skb = __dev_alloc_skb(pkt_len + NET_IP_ALIGN, GFP_ATOMIC);
 		if (unlikely(!skb)) {
 			/* Update statistics */
@@ -174,7 +219,15 @@ avp_net_rx(struct avp_dev *avp, unsigned qnum)
 
 		/* Align IP on 16B boundary */
 		skb_reserve(skb, NET_IP_ALIGN);
-		memcpy(skb_put(skb, pkt_len), pkt_data, pkt_len);
+
+		/* Copy data from mbufs */
+		ret = avp_net_copy_from_mbufs(avp, pkt_buf, skb);
+		if (ret != 0) {
+            dev_kfree_skb(skb);
+			stats->rx_dropped += (num-1);
+			break;
+		}
+
 		skb->dev = dev;
 		skb->protocol = eth_type_trans(skb, dev);
 		skb->ip_summed = CHECKSUM_UNNECESSARY;
@@ -195,15 +248,83 @@ avp_net_rx(struct avp_dev *avp, unsigned qnum)
 	ret = avp_fifo_put(free_q, (void **)avp_bufs, num);
 	if (unlikely(ret != num))
 		/* Failing should not happen */
-		AVP_ERR("Fail to enqueue entries into free_q\n");
+		AVP_ERR_RATELIMIT("Fail to enqueue entries into free_q\n");
 
 	return num;
+}
+
+/*
+ * Copies data from an SKB to a set of mbufs.  This function assumes that
+ * there are sufficient mbufs to copy the entire SKB data area as well as any
+ * SKB fragments.
+ */
+static inline int
+avp_net_copy_to_mbufs(struct avp_dev *avp,
+					  struct sk_buff *skb,
+					  struct wrs_avp_mbuf **mbufs,
+					  unsigned count)
+{
+	struct wrs_avp_mbuf *previous_kva = NULL;
+	struct wrs_avp_mbuf *first_kva = NULL;
+	struct wrs_avp_mbuf *pkt_kva;
+	void *first_data_kva = NULL;
+	struct wrs_avp_mbuf *buf;
+	unsigned copy_length;
+	unsigned offset = 0;
+	void *data_kva;
+	unsigned len;
+	unsigned i;
+    int ret;
+
+	for (i = 0; i < count; i++)
+	{
+		buf = mbufs[i];
+
+		/* translate the host buffer to guest addressing */
+		pkt_kva = avp_net_translate_buffer(avp, (void *)buf);
+		data_kva = avp_net_translate_buffer(avp, pkt_kva->data);
+
+		/* setup the chain of mbufs */
+		if (previous_kva) {
+			previous_kva->next = buf;
+		} else {
+			first_kva = pkt_kva;
+			first_data_kva = data_kva;
+		}
+		previous_kva = pkt_kva;
+
+		/* copy the data from the SKB to the mbuf */
+		copy_length = min_t(unsigned, skb->len - offset, avp->mbuf_size);
+		ret = skb_copy_bits(skb, offset, data_kva, copy_length);
+        if (ret) {
+            AVP_ERR_RATELIMIT("skb->len=%u, offset=%u, copy=%u, i=%u/%u\n",
+                              skb->len, offset, copy_length, i, count);
+            return ret;
+        }
+
+		offset += copy_length;
+		pkt_kva->data_len = copy_length;
+		pkt_kva->next = NULL;
+	}
+
+	BUG_ON(skb->len != offset);
+
+	len = skb->len;
+	if (unlikely(len < ETH_ZLEN)) {
+		memset(first_data_kva + len, 0, ETH_ZLEN - len);
+		len = ETH_ZLEN;
+        first_kva->data_len = len;
+	}
+
+	first_kva->nb_segs = count;
+	first_kva->pkt_len = len;
+
+	return 0;
 }
 
 static int
 avp_net_tx(struct sk_buff *skb, struct net_device *dev)
 {
-	int len = 0;
 	unsigned ret;
 	unsigned i, num, num_aq;
 	struct avp_dev *avp = netdev_priv(dev);
@@ -213,14 +334,13 @@ avp_net_tx(struct sk_buff *skb, struct net_device *dev)
 	struct wrs_avp_mbuf *pkt_va = NULL;
 	struct wrs_avp_fifo *tx_q;
 	struct wrs_avp_fifo *alloc_q;
-	void *data_kva;
+	unsigned count;
 	unsigned qnum;
 
 	dev->trans_start = jiffies; /* save the timestamp */
 
-	/* Check if the length of skb is less than mbuf size */
-	if (skb->len > avp->mbuf_size)
-		goto drop;
+	/* Determine how many mbufs are required to send this packet */
+	count = (skb->len + avp->mbuf_size - 1) / avp->mbuf_size;
 
 	qnum = skb_get_queue_mapping(skb);
 	BUG_ON(qnum > avp->num_tx_queues);
@@ -231,63 +351,64 @@ avp_net_tx(struct sk_buff *skb, struct net_device *dev)
 
 	/**
 	 * Check if it has at least one free entry in tx_q and
-	 * one entry in alloc_q.
+	 * sufficient entries in the alloc_q.
 	 */
 	if (avp_fifo_free_count(tx_q) == 0) {
 		goto drop;
 	}
 
-	if (mbuf_cache->count == 0) {
+	if (mbuf_cache->count < count) {
+		/* refill the cache */
 		num_aq = avp_fifo_count(alloc_q);
-		if (num_aq == 0) {
+		if (num_aq < (count - mbuf_cache->count)) {
 			stats->tx_fifo_errors++;
 			goto drop;
 		}
 
-		num = min(num_aq, (unsigned)WRS_AVP_QUEUE_MBUF_CACHE_SIZE);
+		/* cap the number of buffers to be queried to the max cache size */
+		num = min(num_aq, (unsigned)WRS_AVP_QUEUE_MBUF_CACHE_SIZE - mbuf_cache->count);
 
 		/* dequeue a mbufs from alloc_q */
-		ret = avp_fifo_get(alloc_q, (void **)mbuf_cache->mbufs, num);
+		ret = avp_fifo_get(alloc_q, (void **)&mbuf_cache->mbufs[mbuf_cache->count], num);
 		if (ret != num) {
 			/* Failing should not happen */
-			AVP_ERR("Fail to enqueue mbuf into tx_q\n");
+			AVP_ERR_RATELIMIT("Fail to enqueue mbuf into tx_q\n");
 			goto drop;
 		}
-		mbuf_cache->count = num;
+
 		for (i = 0; i < num; i++) {
-			pkt_kva = avp_net_translate_buffer(avp, (void *)mbuf_cache->mbufs[i]);
+			pkt_va = mbuf_cache->mbufs[mbuf_cache->count + i];
+			pkt_kva = avp_net_translate_buffer(avp,(void*)pkt_va);
 			prefetch(pkt_kva);
 		}
+		mbuf_cache->count += num;
 	}
 
-	pkt_va = mbuf_cache->mbufs[--mbuf_cache->count];
-	pkt_kva = avp_net_translate_buffer(avp, (void *)pkt_va);
-	data_kva = avp_net_translate_buffer(avp, pkt_kva->data);
-
-	len = skb->len;
-	memcpy(data_kva, skb->data, len);
-	if (unlikely(len < ETH_ZLEN)) {
-		memset(data_kva + len, 0, ETH_ZLEN - len);
-		len = ETH_ZLEN;
+	/* copy the skb to one of more mbufs */
+	ret = avp_net_copy_to_mbufs(avp,
+								skb,
+								&mbuf_cache->mbufs[mbuf_cache->count - count],
+								count);
+	if (unlikely(ret != 0)) {
+		goto drop;
 	}
-	pkt_kva->pkt_len = len;
-	pkt_kva->data_len = len;
+	mbuf_cache->count -= count;
 
 	/* enqueue mbuf into tx_q */
-	ret = avp_fifo_put(tx_q, (void **)&pkt_va, 1);
+	ret = avp_fifo_put(tx_q, (void **)&mbuf_cache->mbufs[mbuf_cache->count], 1);
 	if (unlikely(ret != 1)) {
 		/* Failing should not happen */
-		AVP_ERR("Fail to enqueue mbuf into tx_q\n");
+		AVP_ERR_RATELIMIT("Fail to enqueue mbuf into tx_q\n");
 		goto drop;
 	}
 
-	/* Free skb and update statistics */
-	dev_kfree_skb(skb);
-
+	/* update statistics */
 	u64_stats_update_begin(&stats->tx_syncp);
-	stats->tx_bytes += len;
+	stats->tx_bytes += skb->len;
 	stats->tx_packets++;
 	u64_stats_update_end(&stats->tx_syncp);
+
+	dev_kfree_skb(skb);
 
 	return NETDEV_TX_OK;
 
@@ -320,6 +441,12 @@ avp_net_change_mtu(struct net_device *dev, int new_mtu)
 {
 	struct avp_dev *avp = netdev_priv(dev);
 	int ret;
+
+	if (new_mtu > avp->max_rx_pkt_len) {
+		AVP_ERR("mtu %u exceeds device maximum value of %u\n",
+				new_mtu, avp->max_rx_pkt_len);
+		return -EINVAL;
+	}
 
 	AVP_DBG("%s updating mtu to %u\n", new_mtu);
 

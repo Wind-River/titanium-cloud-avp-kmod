@@ -130,14 +130,15 @@ struct wrs_avp_fifo {
  * Padding is necessary to assure the offsets of these fields
  */
 struct wrs_avp_mbuf {
-	void *pool;
+	uint64_t pad0;
 	void *buf_addr;
-	char pad0[14];
+	char pad1[14];
 	uint16_t ol_flags;      /**< Offload features. */
 	void *next;
 	void *data;             /**< Start address of data in segment buffer. */
 	uint16_t data_len;      /**< Amount of data in segment buffer. */
-	char pad2[2];
+    uint8_t nb_segs;        /**< Number of segments */
+	char pad2;
 	uint16_t pkt_len;       /**< Total pkt len: sum of all segment data_len. */
 } __attribute__((__aligned__(64)));
 
@@ -314,6 +315,8 @@ struct wrs_avp_device_info {
      * and recreated).
      */
     uint64_t device_id;
+
+    uint32_t max_rx_pkt_len;      /**< Maximum receive unit size */
 };
 
 #define WRS_AVP_MAX_QUEUES (8) /**< Maximum number of queues per device */
