@@ -440,11 +440,15 @@ static int
 avp_net_change_mtu(struct net_device *dev, int new_mtu)
 {
 	struct avp_dev *avp = netdev_priv(dev);
+	int max_frame;
 	int ret;
 
-	if (new_mtu > avp->max_rx_pkt_len) {
-		AVP_ERR("mtu %u exceeds device maximum value of %u\n",
-				new_mtu, avp->max_rx_pkt_len);
+	max_frame = new_mtu + ETH_HLEN + ETH_FCS_LEN;
+	if (max_frame > avp->max_rx_pkt_len) {
+		AVP_ERR("mtu %u + %u exceeds device maximum value of %u\n",
+				new_mtu,
+				(ETH_HLEN + ETH_FCS_LEN),
+				avp->max_rx_pkt_len);
 		return -EINVAL;
 	}
 
