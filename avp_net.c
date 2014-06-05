@@ -40,7 +40,7 @@
 #include <net/arp.h>
 
 #include <exec-env/wrs_avp_common.h>
-#include <avp_fifo.h>
+#include <exec-env/wrs_avp_fifo.h>
 #include "avp_dev.h"
 #include "avp_ctrl.h"
 

@@ -153,12 +153,12 @@ struct wrs_avp_mbuf {
 
 
 /**@{ AVP PCI identifiers */
-#define WRS_AVP_PCI_VENDOR_ID   PCI_VENDOR_ID_QUMRANET
-#define WRS_AVP_PCI_DEVICE_ID   QUMRANET_DEV_ID_MEMORY
+#define WRS_AVP_PCI_VENDOR_ID   0x1af4
+#define WRS_AVP_PCI_DEVICE_ID   0x1110
 /**@} */
 
 /**@{ AVP PCI subsystem identifiers */
-#define WRS_AVP_PCI_SUB_VENDOR_ID PCI_VENDOR_ID_QUMRANET
+#define WRS_AVP_PCI_SUB_VENDOR_ID WRS_AVP_PCI_VENDOR_ID
 #define WRS_AVP_PCI_SUB_DEVICE_ID 0x1104
 /**@} */
 
@@ -329,6 +329,9 @@ struct wrs_avp_device_info {
 };
 
 #define WRS_AVP_MAX_QUEUES (8) /**< Maximum number of queues per device */
+
+/** Maximum number of chained mbufs in a packet */
+#define WRS_AVP_MAX_MBUF_SEGMENTS (5)
 
 #define WRS_AVP_DEVICE "avp"
 

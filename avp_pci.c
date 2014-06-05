@@ -21,7 +21,9 @@
  *
  *   Contact Information:
  *   Intel Corporation
- *
+ */
+
+/*
  *   Loosely based on the DPDK igb_uio.c PCI handling.
  */
 
@@ -35,7 +37,7 @@
 #include <linux/if_ether.h>
 
 #include <exec-env/wrs_avp_common.h>
-#include <avp_fifo.h>
+#include <exec-env/wrs_avp_fifo.h>
 #include "avp_dev.h"
 #include "avp_ctrl.h"
 
@@ -66,18 +68,19 @@ struct wrs_avp_pci_dev {
 	struct workqueue_struct *workqueue;
 };
 
-/* PCI device id table */
-static struct pci_device_id avp_pci_ids[] = {
-#include <rte_pci_dev_ids.h>
-	{WRS_AVP_PCI_VENDOR_ID,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3,8,0)
+#define PCI_DEVICE_SUB(vend, dev, subvend, subdev) \
+	.vendor = (vend), .device = (dev), \
+	.subvendor = (subvend), .subdevice = (subdev)
+#endif
+
+static DEFINE_PCI_DEVICE_TABLE(avp_pci_ids) = {
+	{ PCI_DEVICE_SUB(WRS_AVP_PCI_VENDOR_ID,
 	 WRS_AVP_PCI_DEVICE_ID,
 	 WRS_AVP_PCI_SUB_VENDOR_ID,
-	 WRS_AVP_PCI_SUB_DEVICE_ID,
-	},
-
-	{ 0, }, /* sentinel value */
+	                 WRS_AVP_PCI_SUB_DEVICE_ID) },
+	{ 0 }
 };
-
 MODULE_DEVICE_TABLE(pci, avp_pci_ids);
 
 /* map memory regions in to kernel virtual address space */

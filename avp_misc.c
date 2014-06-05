@@ -43,9 +43,9 @@
 #include <linux/sched.h>
 
 #include <exec-env/wrs_avp_common.h>
+#include <exec-env/wrs_avp_fifo.h>
 #include "avp_dev.h"
 #include "avp_ctrl.h"
-#include "avp_fifo.h"
 
 MODULE_LICENSE("Dual BSD/GPL");
 MODULE_AUTHOR("Wind River Systems");
