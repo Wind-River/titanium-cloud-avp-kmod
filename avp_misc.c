@@ -26,7 +26,9 @@
 
 /*
  * This module and all associated files have been derived from the original
- * RTE KNI module which existed in v1.5.0 of the Intel DPDK.
+ * RTE KNI module which existed in v1.5.0 of the Intel DPDK.  It was forked
+ * off as a new module named AVP to avoid conflicts when merging with new
+ * versions and patches to existing DPDK branches.
  */
 
 #include <linux/module.h>
