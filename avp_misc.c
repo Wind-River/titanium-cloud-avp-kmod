@@ -43,7 +43,6 @@
 #include <linux/bottom_half.h>
 #include <linux/rtnetlink.h>
 #include <linux/sched.h>
-#include <linux/sched/rt.h>
 
 #include <exec-env/wrs_avp_common.h>
 #include <exec-env/wrs_avp_fifo.h>
@@ -957,7 +956,7 @@ avp_validate_kthread_sched(void)
             
         case SCHED_FIFO:
         case SCHED_RR:
-            if ((kthread_priority == 0) || (kthread_priority > MAX_RT_PRIO-1)) {
+            if ((kthread_priority < 1) || (kthread_priority > 99)) {
                 AVP_ERR("Invalid AVP kthread RT priority: %d\n", kthread_priority);
                 return -EINVAL;
             }
