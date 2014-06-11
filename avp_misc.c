@@ -43,6 +43,7 @@
 #include <linux/bottom_half.h>
 #include <linux/rtnetlink.h>
 #include <linux/sched.h>
+#include <linux/sched/rt.h>
 
 #include <exec-env/wrs_avp_common.h>
 #include <exec-env/wrs_avp_fifo.h>
@@ -78,6 +79,8 @@ unsigned long device_in_use;
 
 /* AVP kernel threads */
 static char *kthread_cpulist = NULL;
+static int kthread_policy = SCHED_RR;
+static int kthread_priority = 1;
 static cpumask_t avp_cpumask; /* allowed CPU mask for kernel threads */
 static DEFINE_PER_CPU(struct avp_thread, avp_threads);
 
@@ -121,14 +124,15 @@ avp_thread_process(void *arg)
 {
 	struct avp_thread *thread = (struct avp_thread *)arg;
 	struct avp_dev_rx_queue *queue;
+	struct sched_param schedpar;
 	struct avp_dev *dev, *n;
 	unsigned busy;
 	unsigned i;
 	unsigned q;
 
-	/* bump our priority to same as ksoftirqd */
-	struct sched_param param = { .sched_priority = 1 };
-	sched_setscheduler(current, SCHED_RR, &param);
+	/* update our priority to the configured value */
+	schedpar.sched_priority = kthread_priority;
+	sched_setscheduler(current, kthread_policy, &schedpar);
 
 	while (!kthread_should_stop()) {
 		i = 0;
@@ -943,6 +947,32 @@ avp_parse_kthread_cpulist(void)
 
 
 static int __init
+avp_validate_kthread_sched(void)
+{
+    switch (kthread_policy) {
+        case SCHED_NORMAL:
+            AVP_INFO("Setting AVP kthread priority to zero for default policy\n");
+            kthread_priority = 0;
+            break;
+            
+        case SCHED_FIFO:
+        case SCHED_RR:
+            if ((kthread_priority == 0) || (kthread_priority > MAX_RT_PRIO-1)) {
+                AVP_ERR("Invalid AVP kthread RT priority: %d\n", kthread_priority);
+                return -EINVAL;
+            }
+            break;
+
+        default:
+            AVP_ERR("Unsupported scheduler policy: %d\n", kthread_policy);
+            return -EINVAL;
+    }
+    
+    return 0;
+}
+
+
+static int __init
 avp_init(void)
 {
 	int ret;
@@ -951,6 +981,11 @@ avp_init(void)
 
 	if (avp_parse_kthread_cpulist() < 0) {
 		AVP_ERR("Invalid parameter for kthread_cpu list\n");
+		return -EINVAL;
+	}
+
+	if (avp_validate_kthread_sched() < 0) {
+		AVP_ERR("Invalid parameter for kthread_policy\n");
 		return -EINVAL;
 	}
 
@@ -993,6 +1028,8 @@ module_init(avp_init);
 module_exit(avp_exit);
 
 module_param(kthread_cpulist, charp, S_IRUGO);
-MODULE_PARM_DESC(kthread_cpulist,
-"Kernel thread cpu list (default all)\n"
-);
+MODULE_PARM_DESC(kthread_cpulist, "Kernel thread cpu list (default all)\n");
+module_param(kthread_policy, int, S_IRUGO);
+MODULE_PARM_DESC(kthread_policy, "Kernel thread scheduling policy\n");
+module_param(kthread_priority, int, S_IRUGO);
+MODULE_PARM_DESC(kthread_priority, "Kernel thread scheduling priority\n");
