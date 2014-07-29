@@ -250,11 +250,15 @@ struct wrs_avp_memmap_info {
 #define WRS_AVP_DEVICE_VERSION_3 3
 #define WRS_AVP_DEVICE_VERSION_4 4
 #define WRS_AVP_DEVICE_VERSION_5 5
-#define WRS_AVP_DEVICE_VERSION WRS_AVP_DEVICE_VERSION_5
+#define WRS_AVP_DEVICE_VERSION_6 6
+#define WRS_AVP_DEVICE_VERSION WRS_AVP_DEVICE_VERSION_6
 /**@} */
 
-/* defines the number of mbuf pools supported per devices (1 per socket) */
-#define WRS_AVP_MAX_MEMPOOLS 2
+/**
+ * Defines the number of mbuf pools supported per device (1 per socket)
+ * @note This value should be equal to RTE_MAX_NUMA_NODES
+ */
+#define WRS_AVP_MAX_MEMPOOLS (8)
 
 /*
  * Defines address translation parameters for each support mbuf pool
