@@ -101,13 +101,12 @@ avp_net_config(struct net_device *dev, struct ifmap *map)
 static inline void *
 avp_net_translate_buffer(struct avp_dev *avp, void *addr)
 {
-	struct avp_mempool_info *pool = &avp->pool[0];
+	struct avp_mempool_info *pool;
+	unsigned i;
 
-	if (likely((addr >= pool->va) && (addr < (pool->va + pool->length)))) {
-		return addr - pool->va + pool->kva;
-	} else {
-		pool = &avp->pool[1];
-		if (likely((addr >= pool->va) && (addr < (pool->va + pool->length)))) {
+	for (i = 0; i < WRS_AVP_MAX_MEMPOOLS; i++) {
+		pool = &avp->pool[i];
+		if ((pool != NULL) && (addr >= pool->va) && (addr < (pool->va + pool->length))) {
 			return addr - pool->va + pool->kva;
 		}
 	}
