@@ -41,6 +41,7 @@
 #include <linux/cpumask.h>
 #include <linux/percpu.h>
 #include <linux/bottom_half.h>
+#include <linux/threads.h>
 #include <linux/rtnetlink.h>
 #include <linux/sched.h>
 
@@ -81,7 +82,7 @@ static char *kthread_cpulist = NULL;
 static int kthread_policy = SCHED_RR;
 static int kthread_priority = 1;
 static cpumask_t avp_cpumask; /* allowed CPU mask for kernel threads */
-static DEFINE_PER_CPU(struct avp_thread, avp_threads);
+static struct avp_thread avp_threads[NR_CPUS] ____cacheline_aligned;
 
 /* AVP device list */
 static DECLARE_RWSEM(avp_list_lock);
@@ -106,8 +107,8 @@ avp_thread_init(void)
 	struct avp_thread * thread;
 	int cpu;
 
-	for_each_possible_cpu(cpu) {
-		thread = &per_cpu(avp_threads, cpu);
+	 for_each_possible_cpu(cpu) {
+		thread = &avp_threads[cpu];
 
 		thread->cpu = cpu;
 		thread->avp_kthread = NULL;
@@ -177,7 +178,7 @@ avp_thread_queue_assign(struct avp_dev * avp, unsigned queue_id)
 	/* find thread with the least queues */
 	thread = NULL;
 	for_each_cpu_and(cpu, &avp_cpumask, cpu_online_mask) {
-		thread_ptr = &per_cpu(avp_threads, cpu);
+		thread_ptr = &avp_threads[cpu];
 
 		spin_lock(&thread_ptr->lock);
 		if (thread_ptr->rx_count < WRS_AVP_KTHREAD_MAX_RX_QUEUES) {
@@ -232,7 +233,7 @@ avp_thread_dev_remove(struct avp_dev * avp)
 
 	/* remove queues from all assigned threads */
 	for_each_cpu_and(cpu, &avp_cpumask, cpu_online_mask) {
-		thread = &per_cpu(avp_threads, cpu);
+		thread = &avp_threads[cpu];
 
 		spin_lock(&thread->lock);
 		for (q = 0; q < thread->rx_count; ) {
