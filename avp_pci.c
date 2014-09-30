@@ -128,6 +128,21 @@ avp_pci_map_regions(struct pci_dev *dev,
 	return 0;
 }
 
+/* verify that the incoming device version is compatible with our own version */
+static int
+avp_pci_device_version_check(uint32_t version)
+{
+    uint32_t driver = WRS_AVP_STRIP_MINOR_VERSION(WRS_AVP_KERNEL_DRIVER_VERSION);
+    uint32_t device = WRS_AVP_STRIP_MINOR_VERSION(version);
+
+    if (device <= driver) {
+        /* the incoming device version is less than or equal to our own */
+        return 0;
+    }
+
+    return 1;
+}
+
 /* verify that memory regions have expected version and validation markers */
 static int
 avp_pci_check_regions(struct pci_dev *dev,
@@ -163,9 +178,10 @@ avp_pci_check_regions(struct pci_dev *dev,
 				}
 				info = (struct wrs_avp_device_info*)ptr;
 				if ((info->magic != WRS_AVP_DEVICE_MAGIC) ||
-					(info->version != WRS_AVP_DEVICE_VERSION)) {
-					AVP_ERR("Invalid device info magic 0x%08x and version %u\n",
-							info->magic, info->version);
+					avp_pci_device_version_check(info->version)) {
+					AVP_ERR("Invalid device info magic 0x%08x or version 0x%08x > 0x%08x\n",
+							info->magic, info->version,
+                            WRS_AVP_KERNEL_DRIVER_VERSION);
 					return -EINVAL;
 				}
 				break;
@@ -299,6 +315,7 @@ avp_pci_create(struct pci_dev *dev,
 	memset(&dev_config, 0, sizeof(dev_config));
 	dev_config.device_id = info->device_id;
 	dev_config.driver_type = WRS_AVP_DRIVER_TYPE_KERNEL;
+    dev_config.driver_version = WRS_AVP_KERNEL_DRIVER_VERSION;
 	dev_config.features = 0; /* future */
 	dev_config.num_tx_queues = avp_dev->avp->num_tx_queues;
 	dev_config.num_rx_queues = avp_dev->avp->num_rx_queues;

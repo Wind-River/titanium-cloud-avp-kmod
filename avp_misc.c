@@ -589,8 +589,12 @@ avp_dev_create(struct wrs_avp_device_info *dev_info, struct avp_dev **avpptr)
 		avp = (*avpptr);
 		net_dev = avp->net_dev;
 		reused = 1;
-		AVP_INFO("attaching netdev %s to new device 0x%llx\n",
-				 net_dev->name, dev_info->device_id);
+		AVP_INFO("attaching netdev %s to new v%u.%u.%u device 0x%llx\n",
+				 net_dev->name,
+                 WRS_AVP_GET_RELEASE_VERSION(dev_info->version),
+                 WRS_AVP_GET_MAJOR_VERSION(dev_info->version),
+                 WRS_AVP_GET_MINOR_VERSION(dev_info->version),
+                 dev_info->device_id);
 		clear_bit(WRS_AVP_IOCTL_IN_PROGRESS_BIT_NUM, &avp->ioctl_in_progress);
 	}
 
@@ -612,8 +616,12 @@ avp_dev_create(struct wrs_avp_device_info *dev_info, struct avp_dev **avpptr)
 			goto cleanup;
 		}
 
-		AVP_INFO("registered netdev %s for device 0x%llx\n",
-				 net_dev->name, dev_info->device_id);
+		AVP_INFO("registered netdev %s for v%u.%u.%u device 0x%llx\n",
+				 net_dev->name,
+                 WRS_AVP_GET_RELEASE_VERSION(dev_info->version),
+                 WRS_AVP_GET_MAJOR_VERSION(dev_info->version),
+                 WRS_AVP_GET_MINOR_VERSION(dev_info->version),
+                 dev_info->device_id);
 
 		/* add to device list (only once) */
 		down_write(&avp_list_lock);
@@ -781,6 +789,8 @@ avp_ioctl_query(unsigned int ioctl_num, unsigned long ioctl_param)
 	/* update device info */
 	memset(&dev_config, 0, sizeof(dev_config));
 	dev_config.device_id = dev->device_id;
+    dev_config.driver_type = WRS_AVP_DRIVER_TYPE_KERNEL;
+    dev_config.driver_version = WRS_AVP_KERNEL_DRIVER_VERSION;
 	dev_config.features = 0; /* future */
 	dev_config.num_tx_queues = dev->num_tx_queues;
 	dev_config.num_rx_queues = dev->num_rx_queues;
@@ -954,7 +964,7 @@ avp_validate_kthread_sched(void)
             AVP_INFO("Setting AVP kthread priority to zero for default policy\n");
             kthread_priority = 0;
             break;
-            
+
         case SCHED_FIFO:
         case SCHED_RR:
             if ((kthread_priority < 1) || (kthread_priority > 99)) {
@@ -967,7 +977,7 @@ avp_validate_kthread_sched(void)
             AVP_ERR("Unsupported scheduler policy: %d\n", kthread_policy);
             return -EINVAL;
     }
-    
+
     return 0;
 }
 
@@ -975,9 +985,13 @@ avp_validate_kthread_sched(void)
 static int __init
 avp_init(void)
 {
+    uint32_t version = WRS_AVP_KERNEL_DRIVER_VERSION;
 	int ret;
 
-	AVP_PRINT("######## DPDK AVP module loading ########\n");
+	AVP_PRINT("######## DPDK AVP module loading v%u.%u.%u ########\n",
+              WRS_AVP_GET_RELEASE_VERSION(version),
+              WRS_AVP_GET_MAJOR_VERSION(version),
+              WRS_AVP_GET_MINOR_VERSION(version));
 
 	if (avp_parse_kthread_cpulist() < 0) {
 		AVP_ERR("Invalid parameter for kthread_cpu list\n");

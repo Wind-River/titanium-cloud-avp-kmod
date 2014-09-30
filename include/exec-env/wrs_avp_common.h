@@ -101,6 +101,7 @@ enum wrs_avp_req_id {
 struct wrs_avp_device_config {
 	uint64_t device_id;  /**< Unique system identifier */
     uint32_t driver_type; /**< Device Driver type */
+    uint32_t driver_version; /**< Device Driver version */
     uint32_t features; /**< Negotiated features */
 	uint16_t num_tx_queues; /**< Number of active transmit queues */
 	uint16_t num_rx_queues; /**< Number of active receive queues */
@@ -244,15 +245,50 @@ struct wrs_avp_memmap_info {
  */
 #define WRS_AVP_DEVICE_MAGIC (0x20131975)
 
-/**@{  AVP device map versions */
-#define WRS_AVP_DEVICE_VERSION_1 1
-#define WRS_AVP_DEVICE_VERSION_2 2
-#define WRS_AVP_DEVICE_VERSION_3 3
-#define WRS_AVP_DEVICE_VERSION_4 4
-#define WRS_AVP_DEVICE_VERSION_5 5
-#define WRS_AVP_DEVICE_VERSION_6 6
-#define WRS_AVP_DEVICE_VERSION WRS_AVP_DEVICE_VERSION_6
+/**@{  AVP device map versions
+ * WARNING:  do not change the format or names of these variables.  They are
+ * automatically parsed from the build system to generate the SDK package
+ * name.
+ **/
+#define WRS_AVP_RELEASE_VERSION_1 1
+#define WRS_AVP_RELEASE_VERSION WRS_AVP_RELEASE_VERSION_1
+#define WRS_AVP_MAJOR_VERSION_0 0
+#define WRS_AVP_MAJOR_VERSION WRS_AVP_MAJOR_VERSION_0
+#define WRS_AVP_MINOR_VERSION_0 0
+#define WRS_AVP_MINOR_VERSION WRS_AVP_MINOR_VERSION_0
 /**@} */
+
+
+/**
+ * Generates a 32-bit version number from the specified version number
+ * components
+ */
+#define WRS_AVP_MAKE_VERSION(_release, _major, _minor) \
+    ((((_release) & 0xffff) << 16) | (((_major) & 0xff) << 8) | ((_minor) & 0xff))
+
+
+/**
+ * Represents the current version of the AVP host driver
+ */
+#define WRS_AVP_CURRENT_VERSION \
+    WRS_AVP_MAKE_VERSION(WRS_AVP_RELEASE_VERSION, WRS_AVP_MAJOR_VERSION, WRS_AVP_MINOR_VERSION)
+
+
+/**
+ * Access AVP device version values
+ */
+#define WRS_AVP_GET_RELEASE_VERSION(_version) (((_version) >> 16) & 0xffff)
+#define WRS_AVP_GET_MAJOR_VERSION(_version) (((_version) >> 8) & 0xff)
+#define WRS_AVP_GET_MINOR_VERSION(_version) ((_version) & 0xff)
+/**@}*/
+
+
+/**
+ * Remove the minor version number so that only the release and major versions
+ * are used for comparisons.
+ */
+#define WRS_AVP_STRIP_MINOR_VERSION(_version) ((_version) >> 8)
+
 
 /**
  * Defines the number of mbuf pools supported per device (1 per socket)

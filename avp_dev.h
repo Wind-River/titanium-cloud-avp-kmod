@@ -50,6 +50,9 @@
 /* Defines the maximum number of data buffers stored in the Tx cache */
 #define WRS_AVP_QUEUE_MBUF_CACHE_SIZE (32)
 
+/* Defines the current kernel AVP driver version number */
+#define WRS_AVP_KERNEL_DRIVER_VERSION WRS_AVP_CURRENT_VERSION
+
 /**
  * A structure to hold the per-cpu statistics for a device.
  */
