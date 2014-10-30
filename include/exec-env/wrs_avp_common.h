@@ -134,6 +134,17 @@ struct wrs_avp_fifo {
 	void * volatile buffer[0];   /**< The buffer contains mbuf pointers */
 };
 
+
+/** The kernel image of the rte_vlan_macip offload features structure. */
+union wrs_vlan_macip {
+	uint32_t data;
+	struct {
+		uint16_t l3_len:9; /**< L3 (IP) Header Length. */
+		uint16_t l2_len:7; /**< L2 (MAC) Header Length. */
+		uint16_t vlan_tci; /**< VLAN Tag Control Identifier (CPU order). */
+	} f;
+};
+
 /*
  * The kernel image of the rte_mbuf struct, with only the relevant fields.
  * Padding is necessary to assure the offsets of these fields
@@ -149,8 +160,19 @@ struct wrs_avp_mbuf {
     uint8_t nb_segs;        /**< Number of segments */
 	char pad2;
 	uint16_t pkt_len;       /**< Total pkt len: sum of all segment data_len. */
+    union wrs_vlan_macip vlan_macip; /**< Offload data */
 } __attribute__((__aligned__(64)));
 
+
+/**{ AVP device features */
+#define WRS_AVP_FEATURE_VLAN_OFFLOAD (1<<0) /**< Emulated HW VLAN offload */
+/**@} */
+
+
+/**@{ Offload feature flags */
+#define WRS_AVP_TX_VLAN_PKT 0x0001 /**< TX packet is a 802.1q VLAN packet. */
+#define WRS_AVP_RX_VLAN_PKT 0x0800 /**< RX packet is a 802.1q VLAN packet. */
+/**@} */
 
 
 /**@{ AVP PCI identifiers */
@@ -255,7 +277,8 @@ struct wrs_avp_memmap_info {
 #define WRS_AVP_MAJOR_VERSION_0 0
 #define WRS_AVP_MAJOR_VERSION WRS_AVP_MAJOR_VERSION_0
 #define WRS_AVP_MINOR_VERSION_0 0
-#define WRS_AVP_MINOR_VERSION WRS_AVP_MINOR_VERSION_0
+#define WRS_AVP_MINOR_VERSION_1 1
+#define WRS_AVP_MINOR_VERSION WRS_AVP_MINOR_VERSION_1
 /**@} */
 
 
@@ -320,7 +343,7 @@ struct wrs_avp_device_info {
 	phys_addr_t alloc_phys;
 	phys_addr_t free_phys;
 
-	uint32_t features;            /**< Supported feature bitmap (future) */
+	uint32_t features;            /**< Supported feature bitmap */
 	uint8_t min_rx_queues;        /**< Minimum supported receive/free queues */
 	uint8_t num_rx_queues;        /**< Recommended number of receive/free queues */
 	uint8_t max_rx_queues;        /**< Maximum supported receive/free queues */

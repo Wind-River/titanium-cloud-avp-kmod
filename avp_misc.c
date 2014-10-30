@@ -352,12 +352,6 @@ avp_dev_validate(struct wrs_avp_device_info *info)
 		return -EINVAL;
 	}
 
-	if (info->features != 0) {
-		AVP_ERR("AVP device id 0x%llx features 0x%08x are not expected\n",
-				info->device_id, info->features);
-		return -EINVAL;
-	}
-
 	return 0;
 }
 
@@ -561,6 +555,9 @@ avp_dev_create(struct wrs_avp_device_info *dev_info, struct avp_dev **avpptr)
 			AVP_ERR("error allocating device 0x%llx\n", dev_info->device_id);
 			return -EBUSY;
 		}
+
+		net_dev->features = NETIF_F_HW_VLAN_TX | NETIF_F_HW_VLAN_RX;
+        net_dev->hw_features = net_dev->features;
 
 		avp = netdev_priv(net_dev);
 		avp->net_dev = net_dev;
@@ -791,7 +788,7 @@ avp_ioctl_query(unsigned int ioctl_num, unsigned long ioctl_param)
 	dev_config.device_id = dev->device_id;
     dev_config.driver_type = WRS_AVP_DRIVER_TYPE_KERNEL;
     dev_config.driver_version = WRS_AVP_KERNEL_DRIVER_VERSION;
-	dev_config.features = 0; /* future */
+	dev_config.features = WRS_AVP_FEATURE_VLAN_OFFLOAD;
 	dev_config.num_tx_queues = dev->num_tx_queues;
 	dev_config.num_rx_queues = dev->num_rx_queues;
 

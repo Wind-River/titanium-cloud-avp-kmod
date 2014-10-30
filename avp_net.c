@@ -37,6 +37,7 @@
 #include <linux/kthread.h>
 #include <linux/delay.h>
 #include <linux/percpu.h>
+#include <linux/if_vlan.h>
 #include <net/arp.h>
 
 #include <exec-env/wrs_avp_common.h>
@@ -132,6 +133,10 @@ avp_net_copy_from_mbufs(struct avp_dev *avp,
 
 	/* setup the SKB to the proper length */
 	skb_put(skb, pkt_kva->pkt_len);
+
+	if (pkt_kva->ol_flags & WRS_AVP_RX_VLAN_PKT) {
+		__vlan_hwaccel_put_tag(skb, pkt_kva->vlan_macip.f.vlan_tci);
+	}
 
 	do {
 		/* translate the host buffer to guest addressing */
@@ -312,11 +317,19 @@ avp_net_copy_to_mbufs(struct avp_dev *avp,
 	if (unlikely(len < ETH_ZLEN)) {
 		memset(first_data_kva + len, 0, ETH_ZLEN - len);
 		len = ETH_ZLEN;
-        first_kva->data_len = len;
+		first_kva->data_len = len;
 	}
 
 	first_kva->nb_segs = count;
 	first_kva->pkt_len = len;
+
+	if (vlan_tx_tag_present(skb)) {
+		first_kva->ol_flags |= WRS_AVP_TX_VLAN_PKT;
+		first_kva->vlan_macip.f.vlan_tci = vlan_tx_tag_get(skb);
+	} else {
+		first_kva->ol_flags = 0;
+		first_kva->vlan_macip.data = 0;
+	}
 
 	return 0;
 }

@@ -316,7 +316,7 @@ avp_pci_create(struct pci_dev *dev,
 	dev_config.device_id = info->device_id;
 	dev_config.driver_type = WRS_AVP_DRIVER_TYPE_KERNEL;
     dev_config.driver_version = WRS_AVP_KERNEL_DRIVER_VERSION;
-	dev_config.features = 0; /* future */
+	dev_config.features = WRS_AVP_FEATURE_VLAN_OFFLOAD;
 	dev_config.num_tx_queues = avp_dev->avp->num_tx_queues;
 	dev_config.num_rx_queues = avp_dev->avp->num_rx_queues;
     dev_config.if_up = !!(netdev->flags & IFF_UP);
