@@ -135,7 +135,11 @@ avp_net_copy_from_mbufs(struct avp_dev *avp,
 	skb_put(skb, pkt_kva->pkt_len);
 
 	if (pkt_kva->ol_flags & WRS_AVP_RX_VLAN_PKT) {
+#if ( LINUX_VERSION_CODE < KERNEL_VERSION(3,10,0) )
 		__vlan_hwaccel_put_tag(skb, pkt_kva->vlan_macip.f.vlan_tci);
+#else
+		__vlan_hwaccel_put_tag(skb, ntohs(ETH_P_8021Q), pkt_kva->vlan_macip.f.vlan_tci);
+#endif
 	}
 
 	do {

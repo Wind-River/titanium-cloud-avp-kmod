@@ -44,6 +44,7 @@
 #include <linux/threads.h>
 #include <linux/rtnetlink.h>
 #include <linux/sched.h>
+#include <linux/version.h>
 
 #include <exec-env/wrs_avp_common.h>
 #include <exec-env/wrs_avp_fifo.h>
@@ -62,6 +63,11 @@ extern void avp_net_init(struct net_device *dev);
 extern int avp_pci_init(void);
 extern int avp_pci_exit(void);
 
+#if ( LINUX_VERSION_CODE >= KERNEL_VERSION(3,10,0) )
+#define NETIF_F_HW_VLAN_TX     NETIF_F_HW_VLAN_CTAG_TX
+#define NETIF_F_HW_VLAN_RX     NETIF_F_HW_VLAN_CTAG_RX
+#define NETIF_F_HW_VLAN_FILTER NETIF_F_HW_VLAN_CTAG_FILTER
+#endif /* >= 3.10.0 */
 
 /* Defines the number of loop interations before yielding to the scheduler */
 #define WRS_AVP_RX_LOOP_NUM 1000
