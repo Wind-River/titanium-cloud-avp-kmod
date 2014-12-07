@@ -34,6 +34,7 @@
 #include <linux/module.h>
 #include <linux/miscdevice.h>
 #include <linux/netdevice.h>
+#include <linux/cpu.h>
 #include <linux/pci.h>
 #include <linux/kthread.h>
 #include <linux/rwsem.h>
@@ -178,7 +179,7 @@ avp_thread_process(void *arg)
 }
 
 static int
-_avp_thread_queue_assign(struct avp_dev * avp, unsigned queue_id)
+_avp_thread_queue_assign(struct avp_dev * avp, unsigned queue_id, const cpumask_t *cpumask)
 {
 	struct avp_dev_rx_queue * queue;
 	struct avp_thread * thread;
@@ -188,7 +189,7 @@ _avp_thread_queue_assign(struct avp_dev * avp, unsigned queue_id)
 
 	/* find thread with the least queues */
 	thread = NULL;
-	for_each_cpu_and(cpu, &avp_cpumask, cpu_online_mask) {
+	for_each_cpu_and(cpu, &avp_cpumask, cpumask) {
 		thread_ptr = &avp_threads[cpu];
 
         if (thread_ptr->rx_count < WRS_AVP_KTHREAD_MAX_RX_QUEUES) {
@@ -203,6 +204,9 @@ _avp_thread_queue_assign(struct avp_dev * avp, unsigned queue_id)
 		AVP_ERR("Unable to assign AVP RX queue: %u\n", queue_id);
 		return -ESRCH;
 	}
+
+	AVP_INFO("Assigning %s/%u to cpu%u\n",
+			 netdev_name(avp->net_dev), queue_id, thread->cpu);
 
 	spin_lock(&thread->lock);
 	queue = &thread->rx_queues[thread->rx_count];
@@ -219,6 +223,7 @@ _avp_thread_queue_assign(struct avp_dev * avp, unsigned queue_id)
 							"avp/%d", thread->cpu);
 
 		if (IS_ERR(thread->avp_kthread)) {
+			thread->avp_kthread = NULL;
 			AVP_ERR("Unable to create kernel thread: %u\n", thread->cpu);
 			return -ECANCELED;
 		}
@@ -240,7 +245,7 @@ avp_thread_dev_remove(struct avp_dev * avp)
     mutex_lock(&avp_thread_lock);
 
 	/* remove queues from all assigned threads */
-	for_each_cpu_and(cpu, &avp_cpumask, cpu_online_mask) {
+	for_each_cpu_and(cpu, &avp_cpumask, cpu_possible_mask) {
 		thread = &avp_threads[cpu];
 
 		spin_lock(&thread->lock);
@@ -276,11 +281,210 @@ avp_thread_dev_add(struct avp_dev *avp)
 
 	/* assign RX queues to AVP threads (creating thread if necessary) */
 	for (i = 0; i < avp->num_rx_queues; i++) {
-		_avp_thread_queue_assign(avp, i);
+		_avp_thread_queue_assign(avp, i, cpu_online_mask);
 	}
 
 	mutex_unlock(&avp_thread_lock);
 }
+
+#ifdef CONFIG_HOTPLUG_CPU
+static void
+avp_cpu_dump(void)
+{
+#ifdef WRS_AVP_KMOD_DEBUG
+	struct avp_dev_rx_queue * queue;
+	unsigned q;
+#endif
+	struct avp_thread * thread;
+	int cpu;
+
+	for_each_cpu_and(cpu, &avp_cpumask, cpu_online_mask) {
+		thread = &avp_threads[cpu];
+		AVP_INFO("CPU %u: %u rx queues\n", cpu, thread->rx_count);
+#ifdef WRS_AVP_KMOD_DEBUG
+		for (q = 0; q < thread->rx_count; q++) {
+			queue = &thread->rx_queues[q];
+			AVP_INFO("	queue %u: %s/%u\n",
+					 q, netdev_name(queue->avp->net_dev), queue->queue_id);
+		}
+#endif
+	}
+}
+
+/*
+ * Transfer the last queue (largest index) from the source thread to the
+ * destination thread.
+ */
+static int
+_avp_thread_queue_transfer(struct avp_thread *dst, struct avp_thread *src)
+{
+	struct avp_dev_rx_queue *src_queue, *dst_queue;
+
+	/* remove from source thread */
+	spin_lock(&src->lock);
+	src->rx_count--;
+	src_queue = &src->rx_queues[src->rx_count];
+	spin_unlock(&src->lock);
+
+	/* add to target thread */
+	spin_lock(&dst->lock);
+	dst_queue = &dst->rx_queues[dst->rx_count];
+	dst_queue->avp = src_queue->avp;
+	dst_queue->queue_id = src_queue->queue_id;
+	dst->rx_count++;
+	spin_unlock(&dst->lock);
+
+	AVP_INFO("Transferred %s/%u from cpu%u to cpu%u\n",
+			 netdev_name(src_queue->avp->net_dev),
+			 src_queue->queue_id,
+			 src->cpu, dst->cpu);
+
+	return 0;
+}
+
+static int
+avp_cpu_online_action(unsigned int cpu)
+{
+	struct avp_thread *busiest, *tmp, *thread = &avp_threads[cpu];
+	cpumask_var_t candidates;
+	unsigned transferred;
+	int ret = -EINVAL;
+	int c;
+
+	mutex_lock(&avp_thread_lock);
+	if (thread->avp_kthread) {
+		ret = 0;
+		goto out;
+	}
+
+	if (!zalloc_cpumask_var(&candidates, GFP_KERNEL)) {
+		ret = -ENOMEM;
+		goto out;
+	}
+	cpumask_andnot(candidates, cpu_online_mask, cpumask_of(cpu));
+
+	thread->avp_kthread = kthread_create_on_node(avp_thread_process,
+												 (void *)thread,
+												 cpu_to_node(cpu),
+												 "avp/%d", cpu);
+	if (IS_ERR(thread->avp_kthread)) {
+		thread->avp_kthread = NULL;
+		AVP_ERR("Unable to create kernel thread: %u\n", thread->cpu);
+		ret = -ECANCELED;
+		goto out_free;
+	}
+
+	kthread_bind(thread->avp_kthread, thread->cpu);
+	wake_up_process(thread->avp_kthread);
+
+	do {
+		busiest = NULL;
+		transferred = 0;
+		for_each_cpu_and(c, &avp_cpumask, candidates) {
+			tmp = &avp_threads[c];
+			if (busiest == NULL || tmp->rx_count > busiest->rx_count) {
+				busiest = tmp;
+			}
+		}
+
+		if (busiest->rx_count > (thread->rx_count + 1)) {
+			_avp_thread_queue_transfer(thread, busiest);
+			transferred = 1;
+		}
+
+		/* keep trying until all threads are as balanced as possible */
+	} while (transferred);
+
+	AVP_INFO("CPU online: %u\n", cpu);
+	avp_cpu_dump();
+	ret = 0;
+
+out_free:
+	free_cpumask_var(candidates);
+out:
+	mutex_unlock(&avp_thread_lock);
+	return notifier_from_errno(ret);
+}
+
+static int
+avp_cpu_offline_action(unsigned int cpu)
+{
+	struct avp_thread *thread = &avp_threads[cpu];
+	struct avp_dev_rx_queue * queue;
+	cpumask_var_t candidates;
+	int ret = -EINVAL;
+	unsigned q;
+
+	mutex_lock(&avp_thread_lock);
+	if (!thread->avp_kthread) {
+		ret = 0;
+		goto out;
+	}
+
+	if (!zalloc_cpumask_var(&candidates, GFP_KERNEL)) {
+		ret = -ENOMEM;
+		goto out;
+	}
+	cpumask_andnot(candidates, cpu_online_mask, cpumask_of(cpu));
+
+	kthread_stop(thread->avp_kthread);
+	thread->avp_kthread = NULL;
+
+	spin_lock(&thread->lock);
+	for (q = 0; q < thread->rx_count; q++) {
+		queue = &thread->rx_queues[q];
+		ret = _avp_thread_queue_assign(queue->avp, queue->queue_id, candidates);
+		if (ret) {
+			spin_unlock(&thread->lock);
+			AVP_ERR("Failed to re-assign %s/%u off of avp/%u, ret=%d\n",
+					netdev_name(queue->avp->net_dev), queue->queue_id, cpu, ret);
+			goto out_free;
+		}
+	}
+	thread->rx_count = 0;
+	spin_unlock(&thread->lock);
+
+	AVP_INFO("CPU offline: %u\n", cpu);
+	avp_cpu_dump();
+	ret = 0;
+
+out_free:
+	free_cpumask_var(candidates);
+out:
+	mutex_unlock(&avp_thread_lock);
+	return notifier_from_errno(ret);
+}
+
+static int
+avp_cpu_hotplug_callback(struct notifier_block *nfb,
+						 unsigned long action, void *hcpu)
+{
+	unsigned int cpu = (unsigned long)hcpu;
+	int ret;
+
+	switch (action) {
+		case CPU_DOWN_FAILED:
+			/* handle a failure to offline a cpu */
+		case CPU_ONLINE:
+		case CPU_ONLINE_FROZEN:
+			ret = avp_cpu_online_action(cpu);
+			break;
+		case CPU_DOWN_PREPARE:
+		case CPU_DOWN_PREPARE_FROZEN:
+			ret = avp_cpu_offline_action(cpu);
+			break;
+		default:
+			ret = NOTIFY_OK;
+	}
+
+	return ret;
+}
+
+static struct notifier_block avp_cpu_hotplug_notifier =
+{
+	.notifier_call = avp_cpu_hotplug_callback,
+};
+#endif
 
 
 /*****************************************************************************
@@ -942,7 +1146,7 @@ avp_parse_kthread_cpulist(void)
 	int ret;
 
 	if (!kthread_cpulist) {
-		cpumask_copy(&avp_cpumask, cpu_online_mask);
+		cpumask_copy(&avp_cpumask, cpu_possible_mask);
 		return 0;
 	}
 
@@ -953,11 +1157,11 @@ avp_parse_kthread_cpulist(void)
 	}
 
 	if (!cpumask_intersects(&avp_cpumask, cpu_online_mask)) {
-		AVP_ERR("CPU mask does not specify online CPUs\n");
+		AVP_ERR("CPU mask does not specify any online CPUs\n");
 		return -EINVAL;
 	}
 
-	cpumask_and(&avp_cpumask, &avp_cpumask, cpu_online_mask);
+	cpumask_and(&avp_cpumask, &avp_cpumask, cpu_possible_mask);
 
 	return 0;
 }
@@ -1024,6 +1228,10 @@ avp_init(void)
 		return ret;
 	}
 
+#ifdef CONFIG_HOTPLUG_CPU
+	register_hotcpu_notifier(&avp_cpu_hotplug_notifier);
+#endif
+
 	/* Setup guest PCI driver */
 	ret = avp_pci_init();
 	if (ret != 0) {
@@ -1040,6 +1248,11 @@ static void __exit
 avp_exit(void)
 {
 	AVP_PRINT("####### DPDK AVP module unloading  #######\n");
+
+#ifdef CONFIG_HOTPLUG_CPU
+	unregister_hotcpu_notifier(&avp_cpu_hotplug_notifier);
+#endif
+
 	avp_pci_exit();
 	misc_deregister(&avp_misc);
 	AVP_PRINT("####### DPDK AVP module unloaded	 #######\n");
