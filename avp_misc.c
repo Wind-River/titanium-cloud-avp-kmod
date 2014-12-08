@@ -89,6 +89,7 @@ static int kthread_policy = SCHED_RR;
 static int kthread_priority = 1;
 static cpumask_t avp_cpumask; /* allowed CPU mask for kernel threads */
 static struct avp_thread avp_threads[NR_CPUS] ____cacheline_aligned;
+static DEFINE_MUTEX(avp_thread_lock);
 
 /* AVP device list */
 static DECLARE_RWSEM(avp_list_lock);
@@ -113,7 +114,9 @@ avp_thread_init(void)
 	struct avp_thread * thread;
 	int cpu;
 
-	 for_each_possible_cpu(cpu) {
+	mutex_init(&avp_thread_lock);
+
+	for_each_possible_cpu(cpu) {
 		thread = &avp_threads[cpu];
 
 		thread->cpu = cpu;
@@ -132,6 +135,7 @@ avp_thread_process(void *arg)
 	struct avp_dev_rx_queue *queue;
 	struct sched_param schedpar;
 	struct avp_dev *dev, *n;
+	unsigned rx_count;
 	unsigned busy;
 	unsigned i;
 	unsigned q;
@@ -147,7 +151,8 @@ avp_thread_process(void *arg)
 
 			local_bh_disable();
 			spin_lock(&thread->lock);
-			for (q = 0; q < thread->rx_count; q++) {
+			rx_count = thread->rx_count;
+			for (q = 0; q < rx_count; q++) {
 				queue = &thread->rx_queues[q];
 				busy |= avp_net_rx(queue->avp, queue->queue_id);
 			}
@@ -173,7 +178,7 @@ avp_thread_process(void *arg)
 }
 
 static int
-avp_thread_queue_assign(struct avp_dev * avp, unsigned queue_id)
+_avp_thread_queue_assign(struct avp_dev * avp, unsigned queue_id)
 {
 	struct avp_dev_rx_queue * queue;
 	struct avp_thread * thread;
@@ -186,14 +191,12 @@ avp_thread_queue_assign(struct avp_dev * avp, unsigned queue_id)
 	for_each_cpu_and(cpu, &avp_cpumask, cpu_online_mask) {
 		thread_ptr = &avp_threads[cpu];
 
-		spin_lock(&thread_ptr->lock);
-		if (thread_ptr->rx_count < WRS_AVP_KTHREAD_MAX_RX_QUEUES) {
-			rx_count = thread_ptr->rx_count;
-			if ((thread == NULL) || (rx_count < thread->rx_count)) {
-				thread = thread_ptr;
-			}
-		}
-		spin_unlock(&thread_ptr->lock);
+        if (thread_ptr->rx_count < WRS_AVP_KTHREAD_MAX_RX_QUEUES) {
+            rx_count = thread_ptr->rx_count;
+            if ((thread == NULL) || (rx_count < thread->rx_count)) {
+                thread = thread_ptr;
+            }
+        }
 	}
 
 	if (!thread) {
@@ -206,11 +209,10 @@ avp_thread_queue_assign(struct avp_dev * avp, unsigned queue_id)
 	queue->avp = avp;
 	queue->queue_id = queue_id;
 	thread->rx_count++;
+	spin_unlock(&thread->lock);
 
 	if (thread->rx_count == 1 && !thread->avp_kthread) {
 		/* first queue assignment; create the thread. */
-		spin_unlock(&thread->lock);
-
 		thread->avp_kthread = kthread_create_on_node(avp_thread_process,
 							(void *)thread,
 							cpu_to_node(thread->cpu),
@@ -223,8 +225,6 @@ avp_thread_queue_assign(struct avp_dev * avp, unsigned queue_id)
 
 		kthread_bind(thread->avp_kthread, thread->cpu);
 		wake_up_process(thread->avp_kthread);
-	} else {
-		spin_unlock(&thread->lock);
 	}
 
 	return 0;
@@ -236,6 +236,8 @@ avp_thread_dev_remove(struct avp_dev * avp)
 	struct avp_thread * thread;
 	int cpu;
 	unsigned q;
+
+    mutex_lock(&avp_thread_lock);
 
 	/* remove queues from all assigned threads */
 	for_each_cpu_and(cpu, &avp_cpumask, cpu_online_mask) {
@@ -253,17 +255,16 @@ avp_thread_dev_remove(struct avp_dev * avp)
 			}
 			q++;
 		}
+		spin_unlock(&thread->lock);
 
 		/* stop thread if no queues assigned and thread is running */
 		if (thread->rx_count == 0 && thread->avp_kthread) {
-			spin_unlock(&thread->lock);
 			kthread_stop(thread->avp_kthread);
 			thread->avp_kthread = NULL;
 		}
-		else {
-			spin_unlock(&thread->lock);
-		}
 	}
+
+	mutex_unlock(&avp_thread_lock);
 }
 
 static void
@@ -271,12 +272,15 @@ avp_thread_dev_add(struct avp_dev *avp)
 {
 	unsigned i;
 
+	mutex_lock(&avp_thread_lock);
+
 	/* assign RX queues to AVP threads (creating thread if necessary) */
 	for (i = 0; i < avp->num_rx_queues; i++) {
-		avp_thread_queue_assign(avp, i);
+		_avp_thread_queue_assign(avp, i);
 	}
-}
 
+	mutex_unlock(&avp_thread_lock);
+}
 
 
 /*****************************************************************************
