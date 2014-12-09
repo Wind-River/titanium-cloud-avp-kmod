@@ -292,10 +292,20 @@ struct wrs_avp_memmap_info {
 
 /**
  * Represents the current version of the AVP host driver
+ * WARNING:  in the current development branch the host and guest driver
+ * version should always be the same.  When patching guest features back to
+ * GA releases the host version number should not be updated unless there was
+ * an actual change made to the host driver.
  */
-#define WRS_AVP_CURRENT_VERSION \
-    WRS_AVP_MAKE_VERSION(WRS_AVP_RELEASE_VERSION, WRS_AVP_MAJOR_VERSION, WRS_AVP_MINOR_VERSION)
+#define WRS_AVP_CURRENT_HOST_VERSION \
+    WRS_AVP_MAKE_VERSION(WRS_AVP_RELEASE_VERSION_1, WRS_AVP_MAJOR_VERSION_0, WRS_AVP_MINOR_VERSION_1)
 
+
+/**
+ * Represents the current version of the AVP guest drivers
+ */
+#define WRS_AVP_CURRENT_GUEST_VERSION \
+    WRS_AVP_MAKE_VERSION(WRS_AVP_RELEASE_VERSION_1, WRS_AVP_MAJOR_VERSION_0, WRS_AVP_MINOR_VERSION_1)
 
 /**
  * Access AVP device version values
