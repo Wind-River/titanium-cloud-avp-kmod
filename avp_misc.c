@@ -770,9 +770,6 @@ avp_dev_create(struct wrs_avp_device_info *dev_info, struct avp_dev **avpptr)
 			return -EBUSY;
 		}
 
-		net_dev->features = NETIF_F_HW_VLAN_TX | NETIF_F_HW_VLAN_RX;
-        net_dev->hw_features = net_dev->features;
-
 		avp = netdev_priv(net_dev);
 		avp->net_dev = net_dev;
 		avp->status = WRS_AVP_DEV_STATUS_OK;
@@ -782,6 +779,13 @@ avp_dev_create(struct wrs_avp_device_info *dev_info, struct avp_dev **avpptr)
 					dev_info->device_id);
 			avp_dev_free(avp);
 			return -ENOMEM;
+		}
+
+		avp->host_features = dev_info->features;
+		if (avp->host_features & WRS_AVP_FEATURE_VLAN_OFFLOAD)
+		{
+			net_dev->features = NETIF_F_HW_VLAN_TX | NETIF_F_HW_VLAN_RX;
+			net_dev->hw_features = net_dev->features;
 		}
 
 		avp->guest = dev_info->guest;
@@ -807,6 +811,13 @@ avp_dev_create(struct wrs_avp_device_info *dev_info, struct avp_dev **avpptr)
                  WRS_AVP_GET_MINOR_VERSION(dev_info->version),
                  dev_info->device_id);
 		clear_bit(WRS_AVP_IOCTL_IN_PROGRESS_BIT_NUM, &avp->ioctl_in_progress);
+
+		if ((dev_info->features & avp->host_features) != avp->host_features)
+		{
+			AVP_ERR("netdev %s host features mismatched; 0x%08x, host=0x%08x\n",
+					net_dev->name, avp->host_features, dev_info->features);
+			/* This should not be possible; continue for now */
+		}
 	}
 
 	/* the device id can change during migration */

@@ -116,8 +116,11 @@ struct avp_dev {
 	/* unique system identifier */
 	uint64_t device_id;
 
-    /* whether an IOCTL request is in progress on this device */
-    volatile unsigned long ioctl_in_progress;
+	/* stored feature set from initial creation */
+	uint32_t host_features;
+
+	/* whether an IOCTL request is in progress on this device */
+	volatile unsigned long ioctl_in_progress;
 
 	/* current device status */
 	int status;
