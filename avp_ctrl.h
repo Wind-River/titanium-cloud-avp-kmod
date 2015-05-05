@@ -19,7 +19,7 @@
  *   in the file called LICENSE.GPL.
  *
  *   Contact Information:
- *   Intel Corporation
+ *   Wind River Systems, Inc.
  */
 
 #ifndef _AVP_CTRL_H_
