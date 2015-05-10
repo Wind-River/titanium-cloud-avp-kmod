@@ -736,7 +736,7 @@ avp_dev_configure(struct avp_dev *avp, struct wrs_avp_device_info *dev_info)
 }
 
 int
-avp_dev_create(struct wrs_avp_device_info *dev_info, struct avp_dev **avpptr)
+avp_dev_create(struct wrs_avp_device_info *dev_info, struct device *parent, struct avp_dev **avpptr)
 {
 	struct net_device *net_dev = NULL;
 	struct avp_dev *avp, *dev;
@@ -769,6 +769,11 @@ avp_dev_create(struct wrs_avp_device_info *dev_info, struct avp_dev **avpptr)
 		if (net_dev == NULL) {
 			AVP_ERR("error allocating device 0x%llx\n", dev_info->device_id);
 			return -EBUSY;
+		}
+
+		if (parent) {
+			/* set parent device link if attached to a PCI device */
+			SET_NETDEV_DEV(net_dev, parent);
 		}
 
 		avp = netdev_priv(net_dev);
@@ -951,7 +956,7 @@ avp_ioctl_create(unsigned int ioctl_num, unsigned long ioctl_param)
 	}
 
 	/* add a new device */
-	return avp_dev_create(&dev_info, NULL);
+	return avp_dev_create(&dev_info, NULL, NULL);
 }
 
 static int

@@ -43,6 +43,7 @@
 
 /* Utility functions from avp_misc.c */
 extern int avp_dev_create(struct wrs_avp_device_info *dev_info,
+						  struct device *parent,
 						  struct avp_dev **avpptr);
 extern int avp_dev_detach(struct avp_dev *avp);
 extern int avp_dev_release(uint64_t device_id);
@@ -304,7 +305,7 @@ avp_pci_create(struct pci_dev *dev,
 	}
 
 	/* create the actual device using the translated addresses */
-	ret = avp_dev_create(dev_info, &avp_dev->avp);
+	ret = avp_dev_create(dev_info, &dev->dev, &avp_dev->avp);
 	if (ret < 0) {
 		return ret;
 	}
