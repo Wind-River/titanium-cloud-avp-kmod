@@ -62,15 +62,6 @@ avp_net_open(struct net_device *dev)
 		return -EBUSY;
 	}
 
-	if (!is_zero_ether_addr(avp->ethaddr))
-		memcpy(dev->dev_addr, avp->ethaddr, ETH_ALEN);
-	else
-		/*
-		 * Generate random mac address. eth_random_addr() is the newer
-		 * version of generating mac address in linux kernel.
-		 */
-		random_ether_addr(dev->dev_addr);
-
 	netif_tx_start_all_queues(dev);
 
 	return avp_ctrl_set_link_state(avp, 1);

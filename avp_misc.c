@@ -34,6 +34,7 @@
 #include <linux/module.h>
 #include <linux/miscdevice.h>
 #include <linux/netdevice.h>
+#include <linux/etherdevice.h>
 #include <linux/cpu.h>
 #include <linux/pci.h>
 #include <linux/kthread.h>
@@ -797,7 +798,14 @@ avp_dev_create(struct wrs_avp_device_info *dev_info, struct avp_dev **avpptr)
 			 */
 			set_bit(WRS_AVP_IOCTL_IN_PROGRESS_BIT_NUM, &avp->ioctl_in_progress);
 		}
-		memcpy(avp->ethaddr, dev_info->ethaddr, ETH_ALEN);
+
+		memcpy(net_dev->dev_addr, dev_info->ethaddr, ETH_ALEN);
+		if (!is_valid_ether_addr(net_dev->dev_addr)) {
+			AVP_ERR("error validating MAC address: %pM\n", &net_dev->dev_addr);
+			avp_dev_free(avp);
+			return -EINVAL;
+		}
+
 		reused = 0;
 	}
 	else {

@@ -136,9 +136,6 @@ struct avp_dev {
 	struct net_device *net_dev;
 	struct pci_dev *pci_dev;
 
-	/* requested ethernet address */
-	char ethaddr[ETH_ALEN];
-
 	/* transmit queues */
 	void *tx_q[WRS_AVP_MAX_QUEUES];
 
