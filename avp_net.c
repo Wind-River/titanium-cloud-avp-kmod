@@ -62,6 +62,7 @@ avp_net_open(struct net_device *dev)
 		return -EBUSY;
 	}
 
+	netif_carrier_on(dev);
 	netif_tx_start_all_queues(dev);
 
 	return avp_ctrl_set_link_state(avp, 1);
@@ -76,6 +77,7 @@ avp_net_release(struct net_device *dev)
 		return -EBUSY;
 	}
 
+	netif_carrier_off(dev);
 	netif_tx_stop_all_queues(dev);
 
 	return avp_ctrl_set_link_state(avp, 0);

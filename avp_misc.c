@@ -65,6 +65,10 @@ extern void avp_net_init(struct net_device *dev);
 extern int avp_pci_init(void);
 extern int avp_pci_exit(void);
 
+/* Utitlity functions from avp_ethtool.c */
+extern void avp_set_ethtool_ops(struct net_device *netdev);
+
+
 #if ( LINUX_VERSION_CODE >= KERNEL_VERSION(3,10,0) )
 #define NETIF_F_HW_VLAN_TX     NETIF_F_HW_VLAN_CTAG_TX
 #define NETIF_F_HW_VLAN_RX     NETIF_F_HW_VLAN_CTAG_RX
@@ -595,6 +599,8 @@ avp_dev_detach(struct avp_dev *avp)
 	/* update status */
 	avp->status = WRS_AVP_DEV_STATUS_DETACHED;
 
+	netif_carrier_off(net_dev);
+
 	/* suspend transmit processing */
 	netif_tx_stop_all_queues(net_dev);
 
@@ -621,6 +627,7 @@ avp_dev_detach(struct avp_dev *avp)
 restart:
 	avp->status = WRS_AVP_DEV_STATUS_OK;
 	if (net_dev->flags & IFF_UP) {
+		netif_carrier_on(net_dev);
 		netif_tx_start_all_queues(net_dev);
 	}
 	return ret;
@@ -776,6 +783,8 @@ avp_dev_create(struct wrs_avp_device_info *dev_info, struct device *parent, stru
 			SET_NETDEV_DEV(net_dev, parent);
 		}
 
+		avp_set_ethtool_ops(net_dev);
+
 		avp = netdev_priv(net_dev);
 		avp->net_dev = net_dev;
 		avp->status = WRS_AVP_DEV_STATUS_OK;
@@ -851,6 +860,8 @@ avp_dev_create(struct wrs_avp_device_info *dev_info, struct device *parent, stru
 			goto cleanup;
 		}
 
+		netif_carrier_off(net_dev);
+
 		AVP_INFO("registered netdev %s for v%u.%u.%u device 0x%llx\n",
 				 net_dev->name,
                  WRS_AVP_GET_RELEASE_VERSION(dev_info->version),
@@ -865,6 +876,7 @@ avp_dev_create(struct wrs_avp_device_info *dev_info, struct device *parent, stru
 	}
 	else {
 		if (net_dev->flags & IFF_UP) {
+			netif_carrier_on(net_dev);
 			netif_tx_start_all_queues(net_dev);
 		}
 	}
