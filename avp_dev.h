@@ -125,8 +125,8 @@ struct avp_dev {
 	/* current device status */
 	int status;
 
-	/* device type */
-	unsigned guest;
+	/* device mode */
+	unsigned mode;
 
 	/* wait queue for req/resp */
 	wait_queue_head_t wq;
@@ -195,6 +195,8 @@ struct avp_dev_rx_queue {
 struct avp_thread {
 	struct task_struct *avp_kthread;
 	int cpu;
+        int sched_policy;
+        int sched_priority;
 	spinlock_t lock;
 	unsigned int rx_count;
 	struct avp_dev_rx_queue rx_queues[WRS_AVP_KTHREAD_MAX_RX_QUEUES];

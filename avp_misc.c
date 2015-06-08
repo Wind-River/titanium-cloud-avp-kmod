@@ -60,6 +60,7 @@ MODULE_DESCRIPTION("Kernel Module for managing AVP devices");
 /* Utility functions from avp_net.c */
 extern int avp_net_rx(struct avp_dev *avp, unsigned qnum);
 extern void avp_net_init(struct net_device *dev);
+extern void avp_trace_init(struct net_device *dev);
 
 /* Utility functions from avp_pci.c */
 extern int avp_pci_init(void);
@@ -95,6 +96,7 @@ static int kthread_policy = SCHED_RR;
 static int kthread_priority = 1;
 static cpumask_t avp_cpumask; /* allowed CPU mask for kernel threads */
 static struct avp_thread avp_threads[NR_CPUS] ____cacheline_aligned;
+static struct avp_thread avp_trace_thread ____cacheline_aligned;
 static DEFINE_MUTEX(avp_thread_lock);
 
 /* AVP device list */
@@ -126,10 +128,19 @@ avp_thread_init(void)
 		thread = &avp_threads[cpu];
 
 		thread->cpu = cpu;
+		thread->sched_policy = kthread_policy;
+		thread->sched_priority = kthread_priority;
 		thread->avp_kthread = NULL;
 		thread->rx_count = 0;
 		spin_lock_init(&thread->lock);
 	}
+
+	avp_trace_thread.cpu = 0;
+	avp_trace_thread.sched_policy = SCHED_NORMAL;
+	avp_trace_thread.sched_priority = 0;
+	avp_trace_thread.avp_kthread = NULL;
+	avp_trace_thread.rx_count = 0;
+	spin_lock_init(&avp_trace_thread.lock);
 
 	return 0;
 }
@@ -147,8 +158,8 @@ avp_thread_process(void *arg)
 	unsigned q;
 
 	/* update our priority to the configured value */
-	schedpar.sched_priority = kthread_priority;
-	sched_setscheduler(current, kthread_policy, &schedpar);
+	schedpar.sched_priority = thread->sched_priority;
+	sched_setscheduler(current, thread->sched_policy, &schedpar);
 
 	while (!kthread_should_stop()) {
 		i = 0;
@@ -225,7 +236,7 @@ _avp_thread_queue_assign(struct avp_dev * avp, unsigned queue_id, const cpumask_
 		thread->avp_kthread = kthread_create_on_node(avp_thread_process,
 							(void *)thread,
 							cpu_to_node(thread->cpu),
-							"avp/%d", thread->cpu);
+							"avp-rx/%d", thread->cpu);
 
 		if (IS_ERR(thread->avp_kthread)) {
 			thread->avp_kthread = NULL;
@@ -280,17 +291,101 @@ avp_thread_dev_remove(struct avp_dev * avp)
 static void
 avp_thread_dev_add(struct avp_dev *avp)
 {
-	unsigned i;
+	unsigned q;
 
 	mutex_lock(&avp_thread_lock);
 
 	/* assign RX queues to AVP threads (creating thread if necessary) */
-	for (i = 0; i < avp->num_rx_queues; i++) {
-		_avp_thread_queue_assign(avp, i, cpu_online_mask);
+	for (q = 0; q < avp->num_rx_queues; q++) {
+		_avp_thread_queue_assign(avp, q, cpu_online_mask);
 	}
 
 	mutex_unlock(&avp_thread_lock);
 }
+
+
+static int
+_avp_trace_queue_assign(struct avp_dev * avp, unsigned queue_id)
+{
+	struct avp_thread *thread = &avp_trace_thread;
+	struct avp_dev_rx_queue *queue;
+
+	AVP_INFO("Assigning %s/%u to trace thread\n",
+			 netdev_name(avp->net_dev), queue_id);
+
+	spin_lock(&thread->lock);
+	queue = &thread->rx_queues[thread->rx_count];
+	queue->avp = avp;
+	queue->queue_id = queue_id;
+	thread->rx_count++;
+	spin_unlock(&thread->lock);
+
+	if (thread->rx_count == 1 && !thread->avp_kthread) {
+		/* first queue assignment; create the thread. */
+		thread->avp_kthread = kthread_create(avp_thread_process,
+							(void *)thread,
+							"avp-trace");
+
+		if (IS_ERR(thread->avp_kthread)) {
+			thread->avp_kthread = NULL;
+			AVP_ERR("Unable to create kernel trace thread\n");
+			return -ECANCELED;
+		}
+
+		wake_up_process(thread->avp_kthread);
+	}
+
+	return 0;
+}
+
+
+static void
+avp_trace_dev_add(struct avp_dev *avp)
+{
+	unsigned q;
+
+	mutex_lock(&avp_thread_lock);
+
+	/* assign RX queues to AVP threads (creating thread if necessary) */
+	for (q = 0; q < avp->num_rx_queues; q++) {
+		_avp_trace_queue_assign(avp, q);
+	}
+
+	mutex_unlock(&avp_thread_lock);
+}
+
+
+static void
+avp_trace_dev_remove(struct avp_dev * avp)
+{
+	struct avp_thread *thread = &avp_trace_thread;
+	unsigned q;
+
+	mutex_lock(&avp_thread_lock);
+
+	spin_lock(&thread->lock);
+	for (q = 0; q < thread->rx_count; ) {
+		if (thread->rx_queues[q].avp == avp) {
+			thread->rx_count--;
+			if (q != thread->rx_count) {
+				/* replace and recheck the current entry */
+				thread->rx_queues[q] = thread->rx_queues[thread->rx_count];
+				continue;
+			}
+		}
+		q++;
+	}
+	spin_unlock(&thread->lock);
+
+	/* stop thread if no queues assigned and thread is running */
+	if (thread->rx_count == 0 && thread->avp_kthread) {
+		kthread_stop(thread->avp_kthread);
+		thread->avp_kthread = NULL;
+	}
+
+	mutex_unlock(&avp_thread_lock);
+}
+
 
 #ifdef CONFIG_HOTPLUG_CPU
 static void
@@ -768,11 +863,23 @@ avp_dev_create(struct wrs_avp_device_info *dev_info, struct device *parent, stru
 
 		name = (strlen(dev_info->ifname) ?
 				dev_info->ifname : WRS_AVP_NETDEV_NAME_FORMAT);
-		net_dev = alloc_netdev_mqs(sizeof(struct avp_dev),
-								   name,
-								   avp_net_init,
-								   WRS_AVP_MAX_QUEUES,
-								   WRS_AVP_MAX_QUEUES);
+
+		if (dev_info->mode == WRS_AVP_MODE_TRACE)
+		{
+			net_dev = alloc_netdev_mqs(sizeof(struct avp_dev),
+									   name,
+									   avp_trace_init,
+									   WRS_AVP_MAX_QUEUES,
+									   WRS_AVP_MAX_QUEUES);
+		}
+		else
+		{
+			net_dev = alloc_netdev_mqs(sizeof(struct avp_dev),
+									   name,
+									   avp_net_init,
+									   WRS_AVP_MAX_QUEUES,
+									   WRS_AVP_MAX_QUEUES);
+		}
 		if (net_dev == NULL) {
 			AVP_ERR("error allocating device 0x%llx\n", dev_info->device_id);
 			return -EBUSY;
@@ -803,8 +910,8 @@ avp_dev_create(struct wrs_avp_device_info *dev_info, struct device *parent, stru
 			net_dev->hw_features = net_dev->features;
 		}
 
-		avp->guest = dev_info->guest;
-		if (!avp->guest) {
+		avp->mode = dev_info->mode;
+		if (avp->mode != WRS_AVP_MODE_GUEST) {
 			/*
 			 * Assert that an IOCTL request is in progress on this device to
 			 * prevent it from sending up control requests which would result
@@ -813,13 +920,15 @@ avp_dev_create(struct wrs_avp_device_info *dev_info, struct device *parent, stru
 			set_bit(WRS_AVP_IOCTL_IN_PROGRESS_BIT_NUM, &avp->ioctl_in_progress);
 		}
 
-		memcpy(net_dev->dev_addr, dev_info->ethaddr, ETH_ALEN);
-		if (!is_valid_ether_addr(net_dev->dev_addr)) {
-			AVP_ERR("error validating MAC address: %pM\n", &net_dev->dev_addr);
-			avp_dev_free(avp);
-			return -EINVAL;
+		if (avp->mode != WRS_AVP_MODE_TRACE)
+		{
+			memcpy(net_dev->dev_addr, dev_info->ethaddr, ETH_ALEN);
+			if (!is_valid_ether_addr(net_dev->dev_addr)) {
+				AVP_ERR("error validating MAC address: %pM\n", &net_dev->dev_addr);
+				avp_dev_free(avp);
+				return -EINVAL;
+			}
 		}
-
 		reused = 0;
 	}
 	else {
@@ -886,8 +995,16 @@ avp_dev_create(struct wrs_avp_device_info *dev_info, struct device *parent, stru
 	list_add(&avp->poll, &avp_poll_head);
 	up_write(&avp_poll_lock);
 
-	/* assign device to threads for receive processing */
-	avp_thread_dev_add(avp);
+	if (avp->mode == WRS_AVP_MODE_TRACE)
+	{
+		/* assign device to thread for trace processing */
+		avp_trace_dev_add(avp);
+	}
+	else
+	{
+		/* assign device to threads for receive processing */
+		avp_thread_dev_add(avp);
+	}
 
 	avp->status = WRS_AVP_DEV_STATUS_OK;
 
@@ -910,8 +1027,16 @@ _avp_dev_release(struct avp_dev *dev)
 	/* Inform the host that we are shutting down. */
 	avp_ctrl_shutdown(dev);
 
-	/* unassign from receive threads */
-	avp_thread_dev_remove(dev);
+	if (dev->mode == WRS_AVP_MODE_TRACE)
+	{
+		/* unassign from receive threads */
+		avp_trace_dev_remove(dev);
+	}
+	else
+	{
+		/* unassign from receive threads */
+		avp_thread_dev_remove(dev);
+	}
 
 	/* delete and free netdev object */
 	avp_dev_free(dev);
@@ -1129,7 +1254,7 @@ avp_file_release(struct inode *inode, struct file *file)
 
 	down_write(&avp_poll_lock);
 	list_for_each_entry_safe(dev, n, &avp_poll_head, poll) {
-		if (!dev->guest) {
+		if (dev->mode != WRS_AVP_MODE_GUEST) {
 			/* stop polling for responses on all local/host devices */
 			list_del(&dev->poll);
 		}
@@ -1138,7 +1263,7 @@ avp_file_release(struct inode *inode, struct file *file)
 
 	down_write(&avp_list_lock);
 	list_for_each_entry_safe(dev, n, &avp_list_head, list) {
-		if (!dev->guest) {
+		if (dev->mode != WRS_AVP_MODE_GUEST) {
 			/* destroy all local/host devices */
 			avp_thread_dev_remove(dev);
 			avp_dev_free(dev);

@@ -224,7 +224,7 @@ avp_net_rx(struct avp_dev *avp, unsigned qnum)
 		/* Copy data from mbufs */
 		ret = avp_net_copy_from_mbufs(avp, pkt_buf, skb);
 		if (ret != 0) {
-            dev_kfree_skb(skb);
+			dev_kfree_skb(skb);
 			stats->rx_dropped += (num-1);
 			break;
 		}
@@ -275,7 +275,7 @@ avp_net_copy_to_mbufs(struct avp_dev *avp,
 	void *data_kva;
 	unsigned len;
 	unsigned i;
-    int ret;
+	int ret;
 
 	for (i = 0; i < count; i++)
 	{
@@ -429,6 +429,41 @@ drop:
 	return NETDEV_TX_OK;
 }
 
+
+static int
+avp_trace_tx(struct sk_buff *skb, struct net_device *dev)
+{
+	struct avp_dev *avp = netdev_priv(dev);
+	struct avp_stats *stats = this_cpu_ptr(avp->stats);
+
+	/* trace devices do not support transmit operations */
+	dev_kfree_skb(skb);
+	stats->tx_dropped++;
+
+	return NETDEV_TX_OK;
+}
+
+static rx_handler_result_t
+avp_trace_rx(struct sk_buff **pskb)
+{
+	struct sk_buff *skb = *pskb;
+	struct net_device *dev = skb->dev;
+	struct avp_dev *avp = netdev_priv(dev);
+	struct avp_stats *stats = this_cpu_ptr(avp->stats);
+
+	/* update statistics */
+	u64_stats_update_begin(&stats->rx_syncp);
+	stats->rx_bytes += skb->len;
+	stats->rx_packets++;
+	u64_stats_update_end(&stats->rx_syncp);
+
+	/* trace devices do not process received frames */
+	dev_kfree_skb(skb);
+
+	return RX_HANDLER_CONSUMED;
+}
+
+
 #ifdef WRS_AVP_TX_TIMEOUTS
 static void
 avp_net_tx_timeout (struct net_device *dev)
@@ -524,7 +559,7 @@ avp_net_header(struct sk_buff *skb, struct net_device *dev,
 	struct ethhdr *eth = (struct ethhdr *) skb_push(skb, ETH_HLEN);
 
 	memcpy(eth->h_source, saddr ? saddr : dev->dev_addr, dev->addr_len);
-	memcpy(eth->h_dest,	  daddr ? daddr : dev->dev_addr, dev->addr_len);
+	memcpy(eth->h_dest, daddr ? daddr : dev->dev_addr, dev->addr_len);
 	eth->h_proto = htons(type);
 
 	return (dev->hard_header_len);
@@ -573,9 +608,41 @@ avp_net_init(struct net_device *dev)
 	mutex_init(&avp->sync_lock);
 
 	ether_setup(dev); /* assign some of the fields */
-	dev->netdev_ops		 = &avp_net_netdev_ops;
-	dev->header_ops		 = &avp_net_header_ops;
+	dev->netdev_ops = &avp_net_netdev_ops;
+	dev->header_ops = &avp_net_header_ops;
 #ifdef WRS_AVP_TX_TIMEOUTS
 	dev->watchdog_timeo = WRS_AVP_WD_TIMEOUT;
 #endif
+}
+
+
+static const struct net_device_ops avp_trace_netdev_ops = {
+	.ndo_open = avp_net_open,
+	.ndo_stop = avp_net_release,
+	.ndo_set_config = avp_net_config,
+	.ndo_start_xmit = avp_trace_tx,
+	.ndo_get_stats64 = avp_net_stats,
+};
+
+void
+avp_trace_init(struct net_device *dev)
+{
+	struct avp_dev *avp = netdev_priv(dev);
+	int err;
+
+	AVP_DBG("avp_trace_init\n");
+
+	init_waitqueue_head(&avp->wq);
+	mutex_init(&avp->sync_lock);
+
+	ether_setup(dev); /* assign some of the fields */
+	dev->netdev_ops = &avp_trace_netdev_ops;
+	dev->header_ops = &avp_net_header_ops;
+
+	rtnl_lock();
+	err = netdev_rx_handler_register(dev, avp_trace_rx, avp);
+	rtnl_unlock();
+
+	if (err)
+		AVP_ERR("Failed to register trace rx_handler\n");
 }

@@ -95,6 +95,12 @@ enum wrs_avp_req_id {
 #define WRS_AVP_DRIVER_TYPE_QEMU 3
 /**@} */
 
+/**@{ AVP device operational modes */
+#define WRS_AVP_MODE_HOST 0  /**< AVP interface created in host */
+#define WRS_AVP_MODE_GUEST 1 /**< AVP interface created for export to guest */
+#define WRS_AVP_MODE_TRACE 2 /**< AVP interface created for packet tracing */
+/**@} */
+
 /*
  * Structure for AVP queue configuration query request/result
  */
@@ -387,7 +393,7 @@ struct wrs_avp_device_info {
     char ethaddr[ETHER_ADDR_LEN];
 #endif
 
-	uint8_t guest : 1;            /**< Guest AVP devices */
+	uint8_t mode;                /**< device mode, i.e guest, host, trace */
 
 	/* mbuf size */
 	unsigned mbuf_size;
