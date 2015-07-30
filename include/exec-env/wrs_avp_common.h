@@ -5,7 +5,7 @@
  *   GNU LESSER GENERAL PUBLIC LICENSE
  *
  *   Copyright(c) 2010-2013 Intel Corporation. All rights reserved.
- *   Copyright(c) 2014 Wind River Systems, Inc. All rights reserved.
+ *   Copyright(c) 2014-2015 Wind River Systems, Inc. All rights reserved.
  *
  *   This program is free software; you can redistribute it and/or modify
  *   it under the terms of version 2.1 of the GNU Lesser General Public License
@@ -75,6 +75,13 @@
  * processes.  Typically, this is a UUID.
  */
 #define WRS_AVP_ALIASSIZE 128
+
+/**
+ * Memory aligment (cache aligned)
+ */
+#ifndef WRS_AVP_ALIGNMENT
+#define WRS_AVP_ALIGNMENT 64
+#endif
 
 /*
  * Request id.
@@ -158,7 +165,7 @@ struct wrs_avp_mbuf {
     uint32_t pad3;
     uint16_t vlan_tci;      /**< VLAN Tag Control Identifier (CPU order). */
     uint32_t pad4;
-} __attribute__((__aligned__(64), __packed__));
+} __attribute__((__aligned__(WRS_AVP_ALIGNMENT), __packed__));
 
 
 /**{ AVP device features */
@@ -228,7 +235,7 @@ struct wrs_avp_mbuf {
 /*
  * Maximum number of memory regions to export
  */
-#define WRS_AVP_MAX_MAPS  256
+#define WRS_AVP_MAX_MAPS  2048
 
 /*
  * Description of a single memory region
@@ -273,7 +280,8 @@ struct wrs_avp_memmap_info {
 #define WRS_AVP_RELEASE_VERSION WRS_AVP_RELEASE_VERSION_1
 #define WRS_AVP_MAJOR_VERSION_0 0
 #define WRS_AVP_MAJOR_VERSION_1 1
-#define WRS_AVP_MAJOR_VERSION WRS_AVP_MAJOR_VERSION_1
+#define WRS_AVP_MAJOR_VERSION_2 2
+#define WRS_AVP_MAJOR_VERSION WRS_AVP_MAJOR_VERSION_2
 #define WRS_AVP_MINOR_VERSION_0 0
 #define WRS_AVP_MINOR_VERSION_1 1
 #define WRS_AVP_MINOR_VERSION WRS_AVP_MINOR_VERSION_0
@@ -303,7 +311,7 @@ struct wrs_avp_memmap_info {
  * Represents the current version of the AVP guest drivers
  */
 #define WRS_AVP_CURRENT_GUEST_VERSION \
-    WRS_AVP_MAKE_VERSION(WRS_AVP_RELEASE_VERSION_1, WRS_AVP_MAJOR_VERSION_1, WRS_AVP_MINOR_VERSION_0)
+    WRS_AVP_MAKE_VERSION(WRS_AVP_RELEASE_VERSION_1, WRS_AVP_MAJOR_VERSION_2, WRS_AVP_MINOR_VERSION_0)
 
 /**
  * Access AVP device version values
