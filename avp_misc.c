@@ -895,6 +895,7 @@ avp_dev_create(struct wrs_avp_device_info *dev_info, struct device *parent, stru
 		avp = netdev_priv(net_dev);
 		avp->net_dev = net_dev;
 		avp->status = WRS_AVP_DEV_STATUS_OK;
+		avp->features = 0;
 		avp->stats = alloc_percpu(struct avp_stats);
 		if (avp->stats == NULL) {
 			AVP_ERR("error allocating statistics for device 0x%llx\n",
@@ -906,6 +907,12 @@ avp_dev_create(struct wrs_avp_device_info *dev_info, struct device *parent, stru
 		avp->host_features = dev_info->features;
 		if (avp->host_features & WRS_AVP_FEATURE_VLAN_OFFLOAD)
 		{
+			/*
+			 * We always enable VLAN offload during initial device setup.  In
+			 * the future we may choose to support ethtool operations to
+			 * enable/disable these features at runtime.
+			 */
+			avp->features |= WRS_AVP_FEATURE_VLAN_OFFLOAD;
 			net_dev->features = NETIF_F_HW_VLAN_TX | NETIF_F_HW_VLAN_RX;
 			net_dev->hw_features = net_dev->features;
 		}
@@ -943,10 +950,10 @@ avp_dev_create(struct wrs_avp_device_info *dev_info, struct device *parent, stru
                  dev_info->device_id);
 		clear_bit(WRS_AVP_IOCTL_IN_PROGRESS_BIT_NUM, &avp->ioctl_in_progress);
 
-		if ((dev_info->features & avp->host_features) != avp->host_features)
+		if ((dev_info->features & avp->features) != avp->features)
 		{
 			AVP_ERR("netdev %s host features mismatched; 0x%08x, host=0x%08x\n",
-					net_dev->name, avp->host_features, dev_info->features);
+					net_dev->name, avp->features, dev_info->features);
 			/* This should not be possible; continue for now */
 		}
 	}
@@ -1163,7 +1170,7 @@ avp_ioctl_query(unsigned int ioctl_num, unsigned long ioctl_param)
 	dev_config.device_id = dev->device_id;
     dev_config.driver_type = WRS_AVP_DRIVER_TYPE_KERNEL;
     dev_config.driver_version = WRS_AVP_KERNEL_DRIVER_VERSION;
-	dev_config.features = WRS_AVP_FEATURE_VLAN_OFFLOAD;
+	dev_config.features = dev->features;
 	dev_config.num_tx_queues = dev->num_tx_queues;
 	dev_config.num_rx_queues = dev->num_rx_queues;
 
