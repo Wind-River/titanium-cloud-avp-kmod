@@ -485,7 +485,6 @@ avp_net_change_mtu(struct net_device *dev, int new_mtu)
 {
 	struct avp_dev *avp = netdev_priv(dev);
 	int max_frame;
-	int ret;
 
 	max_frame = new_mtu + ETH_HLEN + ETH_FCS_LEN;
 	if (max_frame > avp->max_rx_pkt_len) {
@@ -498,9 +497,7 @@ avp_net_change_mtu(struct net_device *dev, int new_mtu)
 
 	AVP_DBG("%s updating mtu to %u\n", new_mtu);
 
-	ret = avp_ctrl_set_mtu(avp, new_mtu);
-	if (ret == 0)
-		dev->mtu = new_mtu;
+    dev->mtu = new_mtu;
 
 	return 0;
 }

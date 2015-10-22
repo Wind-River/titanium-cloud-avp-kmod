@@ -107,9 +107,6 @@ static struct list_head avp_list_head = LIST_HEAD_INIT(avp_list_head);
 static DECLARE_RWSEM(avp_poll_lock);
 static struct list_head avp_poll_head = LIST_HEAD_INIT(avp_poll_head);
 
-/* AVP device semaphore to prevent control requests during IOCTL requests */
-DECLARE_RWSEM(avp_control_lock);
-
 /*****************************************************************************
  *
  * AVP RX thread utility functions
@@ -918,15 +915,6 @@ avp_dev_create(struct wrs_avp_device_info *dev_info, struct device *parent, stru
 		}
 
 		avp->mode = dev_info->mode;
-		if (avp->mode != WRS_AVP_MODE_GUEST) {
-			/*
-			 * Assert that an IOCTL request is in progress on this device to
-			 * prevent it from sending up control requests which would result
-			 * in a deadlock.
-			 */
-			set_bit(WRS_AVP_IOCTL_IN_PROGRESS_BIT_NUM, &avp->ioctl_in_progress);
-		}
-
 		if (avp->mode != WRS_AVP_MODE_TRACE)
 		{
 			memcpy(net_dev->dev_addr, dev_info->ethaddr, ETH_ALEN);
@@ -948,7 +936,6 @@ avp_dev_create(struct wrs_avp_device_info *dev_info, struct device *parent, stru
                  WRS_AVP_GET_MAJOR_VERSION(dev_info->version),
                  WRS_AVP_GET_MINOR_VERSION(dev_info->version),
                  dev_info->device_id);
-		clear_bit(WRS_AVP_IOCTL_IN_PROGRESS_BIT_NUM, &avp->ioctl_in_progress);
 
 		if ((dev_info->features & avp->features) != avp->features)
 		{
@@ -1018,12 +1005,9 @@ avp_dev_create(struct wrs_avp_device_info *dev_info, struct device *parent, stru
 	if (avpptr)
 		(*avpptr) = avp;
 
-	clear_bit(WRS_AVP_IOCTL_IN_PROGRESS_BIT_NUM, &avp->ioctl_in_progress);
-
 	return 0;
 
 cleanup:
-	clear_bit(WRS_AVP_IOCTL_IN_PROGRESS_BIT_NUM, &avp->ioctl_in_progress);
 	avp_dev_free(avp);
 	return ret;
 }
@@ -1127,16 +1111,8 @@ avp_ioctl_release(unsigned int ioctl_num, unsigned long ioctl_param)
 		return -ENODEV;
 	}
 
-	/*
-	 * Assert that an IOCTL request is in progress on this device to prevent
-	 * it from sending up control requests which would result in a deadlock.
-	 */
-	set_bit(WRS_AVP_IOCTL_IN_PROGRESS_BIT_NUM, &dev->ioctl_in_progress);
-
 	/* delete device */
 	ret = _avp_dev_release(dev);
-
-	clear_bit(WRS_AVP_IOCTL_IN_PROGRESS_BIT_NUM, &dev->ioctl_in_progress);
 
 	return ret;
 }
@@ -1173,6 +1149,7 @@ avp_ioctl_query(unsigned int ioctl_num, unsigned long ioctl_param)
 	dev_config.features = dev->features;
 	dev_config.num_tx_queues = dev->num_tx_queues;
 	dev_config.num_rx_queues = dev->num_rx_queues;
+    dev_config.if_up = !!(dev->net_dev->flags & IFF_UP);
 
 	/* return to user space */
 	ret = copy_to_user((void*)ioctl_param, &dev_config, sizeof(dev_config));
@@ -1193,18 +1170,6 @@ avp_ioctl(struct inode *inode,
 
 	AVP_DBG("IOCTL num=0x%0x param=0x%0lx \n", ioctl_num, ioctl_param);
 
-	/*
-	 * Acquire the control lock to ensure that no other non-ioctl users can
-	 * start sending a control request up to the vswitch.  If they were to be
-	 * able to send up a request while we were doing an ioctl then that could
-	 * lead to deadlock.
-	 */
-	ret = down_write_trylock(&avp_control_lock);
-	if (ret == 0) {
-		AVP_INFO("Rejecting AVP ioctl request while control lock is held\n");
-		return -EBUSY;
-	}
-
 	switch (_IOC_NR(ioctl_num)) {
 	case _IOC_NR(WRS_AVP_IOCTL_CREATE):
 		ret = avp_ioctl_create(ioctl_num, ioctl_param);
@@ -1219,8 +1184,6 @@ avp_ioctl(struct inode *inode,
 		AVP_ERR("unknown IOCTL number %u\n", _IOC_NR(ioctl_num));
 		break;
 	}
-
-	up_write(&avp_control_lock);
 
 	return ret;
 }

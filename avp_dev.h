@@ -122,9 +122,6 @@ struct avp_dev {
 	/* enabled feature bitmap */
 	uint32_t features;
 
-	/* whether an IOCTL request is in progress on this device */
-	volatile unsigned long ioctl_in_progress;
-
 	/* current device status */
 	int status;
 

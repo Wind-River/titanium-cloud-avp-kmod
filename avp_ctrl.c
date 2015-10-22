@@ -40,8 +40,6 @@
 /* Control request response timeout in milliseconds */
 #define WRS_AVP_CTRL_RESPONSE_TIMEOUT 500
 
-extern struct rw_semaphore avp_control_lock;
-
 int
 avp_ctrl_set_link_state(struct avp_dev *avp, unsigned state)
 {
@@ -121,21 +119,21 @@ avp_ctrl_process_request(struct avp_dev *avp,
 		return -EINVAL;
 	}
 
-	if (test_bit(WRS_AVP_IOCTL_IN_PROGRESS_BIT_NUM, &avp->ioctl_in_progress)) {
+	if (avp->mode != WRS_AVP_MODE_GUEST) {
 		/*
-		 * we are running this request from ioctl context so do not send a
+		 * We are running this request from ioctl context so do not send a
 		 * request to the vswitch since it will lead to deadlock; both because
-		 * we would deadlock on avp_control_lock and because vswitch wouldn't
-		 * respond if we also deadlocked on rtnl_lock() (see register_netdev())
-		 */
-		AVP_DBG("not sending control request during IOCTL, req=%u\n",
+		 * we would deadlock on the request (i.e., ioctl() will not return
+		 * until this request is replied to, and this request will not be
+		 * replied to until the ioctl() finishes), and we may deadlock on
+		 * rtnl_lock() if two requests come in simultaneously; one from
+		 * userspace and one from vswitch.
+         */
+		AVP_DBG("not sending control request on host device, req=%u\n",
 				req->req_id);
 		req->result = 0;
 		return 0;
 	}
-
-	/* prevent any new IOCTL operations from starting */
-	down_read(&avp_control_lock);
 
 	/* prevent any other processes from touching the sync_kva area */
 	mutex_lock(&avp->sync_lock);
@@ -200,6 +198,5 @@ avp_ctrl_process_request(struct avp_dev *avp,
 
 unlock:
 	mutex_unlock(&avp->sync_lock);
-	up_read(&avp_control_lock);
 	return ret;
 }
