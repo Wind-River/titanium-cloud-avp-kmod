@@ -789,6 +789,7 @@ avp_pci_remove(struct pci_dev *dev)
 	cancel_work_sync(&avp_dev->detach);
 	cancel_work_sync(&avp_dev->attach);
 	flush_workqueue(avp_dev->workqueue);
+	destroy_workqueue(avp_dev->workqueue);
 
 	/* TODO release sysfs group */
 	avp_pci_release_interrupts(dev, avp_dev);
