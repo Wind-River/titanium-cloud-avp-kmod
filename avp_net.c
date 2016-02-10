@@ -348,10 +348,18 @@ avp_net_tx(struct sk_buff *skb, struct net_device *dev)
 
 	dev->trans_start = jiffies; /* save the timestamp */
 
-	/* Determine how many mbufs are required to send this packet */
+    /* Determine how many mbufs are required to send this packet */
 	count = (skb->len + avp->mbuf_size - 1) / avp->mbuf_size;
+    if (unlikely(count == 0)) {
+        AVP_ERR_RATELIMIT("dropping zero length packet on %s\n", dev->name);
+        goto drop;
+    }
+    else if (unlikely(count > WRS_AVP_MAX_MBUF_SEGMENTS)) {
+        AVP_ERR_RATELIMIT("dropping oversized packet on %s\n", dev->name);
+        goto drop;
+    }
 
-	qnum = skb_get_queue_mapping(skb);
+    qnum = skb_get_queue_mapping(skb);
 	BUG_ON(qnum > avp->num_tx_queues);
 
 	tx_q = avp->tx_q[qnum];
