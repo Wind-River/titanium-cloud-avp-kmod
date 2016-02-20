@@ -320,10 +320,18 @@ avp_net_copy_to_mbufs(struct avp_dev *avp,
 	first_kva->nb_segs = count;
 	first_kva->pkt_len = len;
 
-	if (vlan_tx_tag_present(skb)) {
-		first_kva->ol_flags |= WRS_AVP_TX_VLAN_PKT;
-		first_kva->vlan_tci = vlan_tx_tag_get(skb);
-	} else {
+#if ( LINUX_VERSION_CODE >= KERNEL_VERSION(4,0,0) )
+    if (skb_vlan_tag_present(skb)) {
+#else
+    if (vlan_tx_tag_present(skb)) {
+#endif
+        first_kva->ol_flags |= WRS_AVP_TX_VLAN_PKT;
+#if ( LINUX_VERSION_CODE >= KERNEL_VERSION(4,0,0) )
+        first_kva->vlan_tci = skb_vlan_tag_get(skb);
+#else
+        first_kva->vlan_tci = vlan_tx_tag_get(skb);
+#endif
+    } else {
 		first_kva->ol_flags = 0;
 		first_kva->vlan_tci = 0;
 	}
@@ -571,6 +579,7 @@ avp_net_header(struct sk_buff *skb, struct net_device *dev,
 }
 
 
+#if ( LINUX_VERSION_CODE < KERNEL_VERSION(4,1,0) )
 static int
 avp_net_rebuild_header(struct sk_buff *skb)
 {
@@ -582,11 +591,14 @@ avp_net_rebuild_header(struct sk_buff *skb)
 
 	return 0;
 }
+#endif
 
 
 static const struct header_ops avp_net_header_ops = {
 	.create	 = avp_net_header,
-	.rebuild = avp_net_rebuild_header,
+#if ( LINUX_VERSION_CODE < KERNEL_VERSION(4,1,0) )
+    .rebuild = avp_net_rebuild_header,
+#endif
 	.cache	 = NULL,  /* disable caching */
 };
 

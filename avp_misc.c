@@ -865,7 +865,10 @@ avp_dev_create(struct wrs_avp_device_info *dev_info, struct device *parent, stru
 		{
 			net_dev = alloc_netdev_mqs(sizeof(struct avp_dev),
 									   name,
-									   avp_trace_init,
+#if ( LINUX_VERSION_CODE >= KERNEL_VERSION(3,17,0) )
+                                       NET_NAME_UNKNOWN,
+#endif
+                                       avp_trace_init,
 									   WRS_AVP_MAX_QUEUES,
 									   WRS_AVP_MAX_QUEUES);
 		}
@@ -873,7 +876,10 @@ avp_dev_create(struct wrs_avp_device_info *dev_info, struct device *parent, stru
 		{
 			net_dev = alloc_netdev_mqs(sizeof(struct avp_dev),
 									   name,
-									   avp_net_init,
+#if ( LINUX_VERSION_CODE >= KERNEL_VERSION(3,17,0) )
+                                       NET_NAME_UNKNOWN,
+#endif
+                                       avp_net_init,
 									   WRS_AVP_MAX_QUEUES,
 									   WRS_AVP_MAX_QUEUES);
 		}
