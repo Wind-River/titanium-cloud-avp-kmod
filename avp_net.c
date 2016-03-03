@@ -320,13 +320,13 @@ avp_net_copy_to_mbufs(struct avp_dev *avp,
 	first_kva->nb_segs = count;
 	first_kva->pkt_len = len;
 
-#if ( LINUX_VERSION_CODE >= KERNEL_VERSION(4,0,0) )
+#ifdef skb_vlan_tag_present
     if (skb_vlan_tag_present(skb)) {
 #else
     if (vlan_tx_tag_present(skb)) {
 #endif
         first_kva->ol_flags |= WRS_AVP_TX_VLAN_PKT;
-#if ( LINUX_VERSION_CODE >= KERNEL_VERSION(4,0,0) )
+#ifdef skb_vlan_tag_get
         first_kva->vlan_tci = skb_vlan_tag_get(skb);
 #else
         first_kva->vlan_tci = vlan_tx_tag_get(skb);
