@@ -231,7 +231,7 @@ avp_net_rx(struct avp_dev *avp, unsigned qnum)
 
 		skb->dev = dev;
 		skb->protocol = eth_type_trans(skb, dev);
-		skb->ip_summed = CHECKSUM_UNNECESSARY;
+		skb->ip_summed = CHECKSUM_NONE;
 
 		skb_record_rx_queue(skb, qnum);
 
