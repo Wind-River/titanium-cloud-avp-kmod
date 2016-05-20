@@ -329,6 +329,7 @@ avp_pci_create(struct pci_dev *dev,
 		goto release_device;
 	}
 
+	avp_dev->avp->pci_dev = dev;
 	return 0;
 
 release_device:

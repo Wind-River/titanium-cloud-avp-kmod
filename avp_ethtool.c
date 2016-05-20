@@ -26,6 +26,7 @@
 #include <linux/string.h>
 #include <linux/netdevice.h>
 #include <linux/ethtool.h>
+#include <linux/pci.h>
 
 #include "avp_dev.h"
 
@@ -37,6 +38,7 @@ avp_get_drvinfo(struct net_device *netdev,
 	struct ethtool_drvinfo *drvinfo)
 {
 	uint32_t version = WRS_AVP_KERNEL_DRIVER_VERSION;
+	struct avp_dev *avp = netdev_priv(netdev);
 	char driver_version[32];
 
 	snprintf(driver_version, sizeof(driver_version), "%u.%u.%u",
@@ -46,6 +48,11 @@ avp_get_drvinfo(struct net_device *netdev,
 
 	strlcpy(drvinfo->driver, WRS_AVP_DRIVER_NAME, sizeof(drvinfo->driver));
 	strlcpy(drvinfo->version, driver_version, sizeof(drvinfo->version));
+
+	if(avp->pci_dev) {
+		strlcpy(drvinfo->bus_info, pci_name(avp->pci_dev),
+			sizeof(drvinfo->bus_info) - 1);
+	}
 }
 
 static int

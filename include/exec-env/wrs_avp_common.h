@@ -285,7 +285,8 @@ struct wrs_avp_memmap_info {
 #define WRS_AVP_MINOR_VERSION_0 0
 #define WRS_AVP_MINOR_VERSION_1 1
 #define WRS_AVP_MINOR_VERSION_5 5
-#define WRS_AVP_MINOR_VERSION WRS_AVP_MINOR_VERSION_5
+#define WRS_AVP_MINOR_VERSION_6 6
+#define WRS_AVP_MINOR_VERSION WRS_AVP_MINOR_VERSION_6
 /**@} */
 
 
@@ -312,7 +313,7 @@ struct wrs_avp_memmap_info {
  * Represents the current version of the AVP guest drivers
  */
 #define WRS_AVP_CURRENT_GUEST_VERSION \
-    WRS_AVP_MAKE_VERSION(WRS_AVP_RELEASE_VERSION_1, WRS_AVP_MAJOR_VERSION_2, WRS_AVP_MINOR_VERSION_5)
+    WRS_AVP_MAKE_VERSION(WRS_AVP_RELEASE_VERSION_1, WRS_AVP_MAJOR_VERSION_2, WRS_AVP_MINOR_VERSION_6)
 
 /**
  * Access AVP device version values
