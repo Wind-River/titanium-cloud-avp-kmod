@@ -354,7 +354,11 @@ avp_net_tx(struct sk_buff *skb, struct net_device *dev)
 	unsigned count;
 	unsigned qnum;
 
+#if ( LINUX_VERSION_CODE < KERNEL_VERSION(4,7,0) )
 	dev->trans_start = jiffies; /* save the timestamp */
+#else
+	netif_trans_update(dev);
+#endif
 
     /* Determine how many mbufs are required to send this packet */
 	count = (skb->len + avp->mbuf_size - 1) / avp->mbuf_size;
