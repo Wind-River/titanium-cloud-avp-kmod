@@ -273,7 +273,6 @@ avp_net_copy_to_mbufs(struct avp_dev *avp,
 	unsigned copy_length;
 	unsigned offset = 0;
 	void *data_kva;
-	unsigned len;
 	unsigned i;
 	int ret;
 
@@ -310,15 +309,8 @@ avp_net_copy_to_mbufs(struct avp_dev *avp,
 
 	BUG_ON(skb->len != offset);
 
-	len = skb->len;
-	if (unlikely(len < ETH_ZLEN)) {
-		memset(first_data_kva + len, 0, ETH_ZLEN - len);
-		len = ETH_ZLEN;
-		first_kva->data_len = len;
-	}
-
 	first_kva->nb_segs = count;
-	first_kva->pkt_len = len;
+	first_kva->pkt_len = skb->len;
 
 #ifdef skb_vlan_tag_present
     if (skb_vlan_tag_present(skb)) {
