@@ -107,7 +107,7 @@ avp_ctrl_poll_resp(struct avp_dev *avp)
 
 int
 avp_ctrl_process_request(struct avp_dev *avp,
-                         struct wrs_avp_request *req)
+			 struct wrs_avp_request *req)
 {
 	int ret = -1;
 	void *resp_va;
@@ -121,14 +121,15 @@ avp_ctrl_process_request(struct avp_dev *avp,
 
 	if (avp->mode != WRS_AVP_MODE_GUEST) {
 		/*
-		 * We are running this request from ioctl context so do not send a
-		 * request to the vswitch since it will lead to deadlock; both because
-		 * we would deadlock on the request (i.e., ioctl() will not return
-		 * until this request is replied to, and this request will not be
-		 * replied to until the ioctl() finishes), and we may deadlock on
-		 * rtnl_lock() if two requests come in simultaneously; one from
-		 * userspace and one from vswitch.
-         */
+		 * We are running this request from ioctl context so do not
+		 * send a request to the vswitch since it will lead to
+		 * deadlock; both because we would deadlock on the request
+		 * (i.e., ioctl() will not return until this request is replied
+		 * to, and this request will not be replied to until the
+		 * ioctl() finishes), and we may deadlock on rtnl_lock() if two
+		 * requests come in simultaneously; one from userspace and one
+		 * from vswitch.
+		 */
 		AVP_DBG("not sending control request on host device, req=%u\n",
 				req->req_id);
 		req->result = 0;
@@ -142,9 +143,8 @@ avp_ctrl_process_request(struct avp_dev *avp,
 	AVP_DBG("Sending request %u\n", req->req_id);
 
 	/* Discard any stale responses before starting a new request */
-	while (avp_fifo_get(avp->resp_q, (void**)&resp_va, 1)) {
+	while (avp_fifo_get(avp->resp_q, (void **)&resp_va, 1))
 		AVP_DBG("Discarding stale response\n");
-	}
 
 	/* Construct data */
 	memcpy(avp->sync_kva, req, sizeof(struct wrs_avp_request));
@@ -194,7 +194,7 @@ avp_ctrl_process_request(struct avp_dev *avp,
 	ret = 0;
 
 	AVP_DBG("Result %d received for request %u\n",
-			req->result, req->req_id);
+		req->result, req->req_id);
 
 unlock:
 	mutex_unlock(&avp->sync_lock);

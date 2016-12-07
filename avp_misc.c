@@ -57,20 +57,7 @@ MODULE_LICENSE("Dual BSD/GPL");
 MODULE_AUTHOR("Wind River Systems");
 MODULE_DESCRIPTION("Kernel Module for managing AVP devices");
 
-/* Utility functions from avp_net.c */
-extern int avp_net_rx(struct avp_dev *avp, unsigned qnum);
-extern void avp_net_init(struct net_device *dev);
-extern void avp_trace_init(struct net_device *dev);
-
-/* Utility functions from avp_pci.c */
-extern int avp_pci_init(void);
-extern int avp_pci_exit(void);
-
-/* Utitlity functions from avp_ethtool.c */
-extern void avp_set_ethtool_ops(struct net_device *netdev);
-
-
-#if ( LINUX_VERSION_CODE >= KERNEL_VERSION(3,10,0) )
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0))
 #define NETIF_F_HW_VLAN_TX     NETIF_F_HW_VLAN_CTAG_TX
 #define NETIF_F_HW_VLAN_RX     NETIF_F_HW_VLAN_CTAG_RX
 #define NETIF_F_HW_VLAN_FILTER NETIF_F_HW_VLAN_CTAG_FILTER
@@ -91,7 +78,7 @@ extern void avp_set_ethtool_ops(struct net_device *netdev);
 unsigned long device_in_use;
 
 /* AVP kernel threads */
-static char *kthread_cpulist = NULL;
+static char *kthread_cpulist;
 static int kthread_policy = SCHED_RR;
 static int kthread_priority = 1;
 static cpumask_t avp_cpumask; /* allowed CPU mask for kernel threads */
@@ -116,7 +103,7 @@ static struct list_head avp_poll_head = LIST_HEAD_INIT(avp_poll_head);
 static int __init
 avp_thread_init(void)
 {
-	struct avp_thread * thread;
+	struct avp_thread *thread;
 	int cpu;
 
 	mutex_init(&avp_thread_lock);
@@ -192,11 +179,13 @@ avp_thread_process(void *arg)
 }
 
 static int
-_avp_thread_queue_assign(struct avp_dev * avp, unsigned queue_id, const cpumask_t *cpumask)
+_avp_thread_queue_assign(struct avp_dev *avp,
+			 unsigned queue_id,
+			 const cpumask_t *cpumask)
 {
-	struct avp_dev_rx_queue * queue;
-	struct avp_thread * thread;
-	struct avp_thread * thread_ptr;
+	struct avp_dev_rx_queue *queue;
+	struct avp_thread *thread;
+	struct avp_thread *thread_ptr;
 	unsigned rx_count;
 	int cpu;
 
@@ -205,12 +194,11 @@ _avp_thread_queue_assign(struct avp_dev * avp, unsigned queue_id, const cpumask_
 	for_each_cpu_and(cpu, &avp_cpumask, cpumask) {
 		thread_ptr = &avp_threads[cpu];
 
-        if (thread_ptr->rx_count < WRS_AVP_KTHREAD_MAX_RX_QUEUES) {
-            rx_count = thread_ptr->rx_count;
-            if ((thread == NULL) || (rx_count < thread->rx_count)) {
-                thread = thread_ptr;
-            }
-        }
+		if (thread_ptr->rx_count < WRS_AVP_KTHREAD_MAX_RX_QUEUES) {
+			rx_count = thread_ptr->rx_count;
+			if ((thread == NULL) || (rx_count < thread->rx_count))
+				thread = thread_ptr;
+		}
 	}
 
 	if (!thread) {
@@ -219,7 +207,7 @@ _avp_thread_queue_assign(struct avp_dev * avp, unsigned queue_id, const cpumask_
 	}
 
 	AVP_INFO("Assigning %s/%u to cpu%u\n",
-			 netdev_name(avp->net_dev), queue_id, thread->cpu);
+		 netdev_name(avp->net_dev), queue_id, thread->cpu);
 
 	spin_lock(&thread->lock);
 	queue = &thread->rx_queues[thread->rx_count];
@@ -249,13 +237,13 @@ _avp_thread_queue_assign(struct avp_dev * avp, unsigned queue_id, const cpumask_
 }
 
 static void
-avp_thread_dev_remove(struct avp_dev * avp)
+avp_thread_dev_remove(struct avp_dev *avp)
 {
-	struct avp_thread * thread;
+	struct avp_thread *thread;
 	int cpu;
 	unsigned q;
 
-    mutex_lock(&avp_thread_lock);
+	mutex_lock(&avp_thread_lock);
 
 	/* remove queues from all assigned threads */
 	for_each_cpu_and(cpu, &avp_cpumask, cpu_possible_mask) {
@@ -293,16 +281,15 @@ avp_thread_dev_add(struct avp_dev *avp)
 	mutex_lock(&avp_thread_lock);
 
 	/* assign RX queues to AVP threads (creating thread if necessary) */
-	for (q = 0; q < avp->num_rx_queues; q++) {
+	for (q = 0; q < avp->num_rx_queues; q++)
 		_avp_thread_queue_assign(avp, q, cpu_online_mask);
-	}
 
 	mutex_unlock(&avp_thread_lock);
 }
 
 
 static int
-_avp_trace_queue_assign(struct avp_dev * avp, unsigned queue_id)
+_avp_trace_queue_assign(struct avp_dev *avp, unsigned queue_id)
 {
 	struct avp_thread *thread = &avp_trace_thread;
 	struct avp_dev_rx_queue *queue;
@@ -344,16 +331,15 @@ avp_trace_dev_add(struct avp_dev *avp)
 	mutex_lock(&avp_thread_lock);
 
 	/* assign RX queues to AVP threads (creating thread if necessary) */
-	for (q = 0; q < avp->num_rx_queues; q++) {
+	for (q = 0; q < avp->num_rx_queues; q++)
 		_avp_trace_queue_assign(avp, q);
-	}
 
 	mutex_unlock(&avp_thread_lock);
 }
 
 
 static void
-avp_trace_dev_remove(struct avp_dev * avp)
+avp_trace_dev_remove(struct avp_dev *avp)
 {
 	struct avp_thread *thread = &avp_trace_thread;
 	unsigned q;
@@ -389,10 +375,10 @@ static void
 avp_cpu_dump(void)
 {
 #ifdef WRS_AVP_KMOD_DEBUG
-	struct avp_dev_rx_queue * queue;
+	struct avp_dev_rx_queue *queue;
 	unsigned q;
 #endif
-	struct avp_thread * thread;
+	struct avp_thread *thread;
 	int cpu;
 
 	for_each_cpu_and(cpu, &avp_cpumask, cpu_online_mask) {
@@ -461,9 +447,9 @@ avp_cpu_online_action(unsigned int cpu)
 	cpumask_andnot(candidates, cpu_online_mask, cpumask_of(cpu));
 
 	thread->avp_kthread = kthread_create_on_node(avp_thread_process,
-												 (void *)thread,
-												 cpu_to_node(cpu),
-												 "avp/%d", cpu);
+						     (void *)thread,
+						     cpu_to_node(cpu),
+						     "avp/%d", cpu);
 	if (IS_ERR(thread->avp_kthread)) {
 		thread->avp_kthread = NULL;
 		AVP_ERR("Unable to create kernel thread: %u\n", thread->cpu);
@@ -479,9 +465,8 @@ avp_cpu_online_action(unsigned int cpu)
 		transferred = 0;
 		for_each_cpu_and(c, &avp_cpumask, candidates) {
 			tmp = &avp_threads[c];
-			if (busiest == NULL || tmp->rx_count > busiest->rx_count) {
+			if (busiest == NULL || tmp->rx_count > busiest->rx_count)
 				busiest = tmp;
-			}
 		}
 
 		if (busiest->rx_count > (thread->rx_count + 1)) {
@@ -507,7 +492,7 @@ static int
 avp_cpu_offline_action(unsigned int cpu)
 {
 	struct avp_thread *thread = &avp_threads[cpu];
-	struct avp_dev_rx_queue * queue;
+	struct avp_dev_rx_queue *queue;
 	cpumask_var_t candidates;
 	int ret = -EINVAL;
 	unsigned q;
@@ -554,31 +539,30 @@ out:
 
 static int
 avp_cpu_hotplug_callback(struct notifier_block *nfb,
-						 unsigned long action, void *hcpu)
+			 unsigned long action, void *hcpu)
 {
 	unsigned int cpu = (unsigned long)hcpu;
 	int ret;
 
 	switch (action) {
-		case CPU_DOWN_FAILED:
-			/* handle a failure to offline a cpu */
-		case CPU_ONLINE:
-		case CPU_ONLINE_FROZEN:
-			ret = avp_cpu_online_action(cpu);
-			break;
-		case CPU_DOWN_PREPARE:
-		case CPU_DOWN_PREPARE_FROZEN:
-			ret = avp_cpu_offline_action(cpu);
-			break;
-		default:
-			ret = NOTIFY_OK;
+	case CPU_DOWN_FAILED:
+		/* handle a failure to offline a cpu */
+	case CPU_ONLINE:
+	case CPU_ONLINE_FROZEN:
+		ret = avp_cpu_online_action(cpu);
+		break;
+	case CPU_DOWN_PREPARE:
+	case CPU_DOWN_PREPARE_FROZEN:
+		ret = avp_cpu_offline_action(cpu);
+		break;
+	default:
+		ret = NOTIFY_OK;
 	}
 
 	return ret;
 }
 
-static struct notifier_block avp_cpu_hotplug_notifier =
-{
+static struct notifier_block avp_cpu_hotplug_notifier = {
 	.notifier_call = avp_cpu_hotplug_callback,
 };
 #endif
@@ -598,7 +582,7 @@ avp_dev_flush_cache(struct avp_dev *dev)
 	for (qnum = 0; qnum < WRS_AVP_MAX_QUEUES; qnum++) {
 		struct avp_mbuf_cache *cache = &dev->mbuf_cache[qnum];
 		if (cache->count > 0) {
-			avp_fifo_put(dev->alloc_q[qnum], (void**)cache->mbufs, cache->count);
+			avp_fifo_put(dev->alloc_q[qnum], (void **)cache->mbufs, cache->count);
 			cache->count = 0;
 		}
 	}
@@ -647,9 +631,8 @@ avp_dev_find(uint64_t device_id)
 static int
 avp_dev_validate(struct wrs_avp_device_info *info)
 {
-	if (!info) {
+	if (!info)
 		return -EINVAL;
-	}
 
 	if (info->min_tx_queues > WRS_AVP_MAX_QUEUES) {
 		AVP_ERR("AVP device id 0x%llx min_tx_queues %u exceeds max %u\n",
@@ -722,6 +705,7 @@ restart:
 		netif_carrier_on(net_dev);
 		netif_tx_start_all_queues(net_dev);
 	}
+
 	return ret;
 }
 
@@ -732,7 +716,7 @@ restart:
 int
 avp_dev_configure(struct avp_dev *avp, struct wrs_avp_device_info *dev_info)
 {
-    struct avp_mempool_info *pool;
+	struct avp_mempool_info *pool;
 	unsigned i;
 
 	/* adjust max values */
@@ -835,7 +819,9 @@ avp_dev_configure(struct avp_dev *avp, struct wrs_avp_device_info *dev_info)
 }
 
 int
-avp_dev_create(struct wrs_avp_device_info *dev_info, struct device *parent, struct avp_dev **avpptr)
+avp_dev_create(struct wrs_avp_device_info *dev_info,
+	       struct device *parent,
+	       struct avp_dev **avpptr)
 {
 	struct net_device *net_dev = NULL;
 	struct avp_dev *avp, *dev;
@@ -859,30 +845,28 @@ avp_dev_create(struct wrs_avp_device_info *dev_info, struct device *parent, stru
 		}
 
 		name = (strlen(dev_info->ifname) ?
-				dev_info->ifname : WRS_AVP_NETDEV_NAME_FORMAT);
+			dev_info->ifname : WRS_AVP_NETDEV_NAME_FORMAT);
 
-		if (dev_info->mode == WRS_AVP_MODE_TRACE)
-		{
+		if (dev_info->mode == WRS_AVP_MODE_TRACE) {
 			net_dev = alloc_netdev_mqs(sizeof(struct avp_dev),
-									   name,
-#if ( LINUX_VERSION_CODE >= KERNEL_VERSION(3,17,0) )
-                                       NET_NAME_UNKNOWN,
+						   name,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 17, 0))
+						   NET_NAME_UNKNOWN,
 #endif
-                                       avp_trace_init,
-									   WRS_AVP_MAX_QUEUES,
-									   WRS_AVP_MAX_QUEUES);
-		}
-		else
-		{
+						   avp_trace_init,
+						   WRS_AVP_MAX_QUEUES,
+						   WRS_AVP_MAX_QUEUES);
+		} else {
 			net_dev = alloc_netdev_mqs(sizeof(struct avp_dev),
-									   name,
-#if ( LINUX_VERSION_CODE >= KERNEL_VERSION(3,17,0) )
-                                       NET_NAME_UNKNOWN,
+						   name,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 17, 0))
+						   NET_NAME_UNKNOWN,
 #endif
-                                       avp_net_init,
-									   WRS_AVP_MAX_QUEUES,
-									   WRS_AVP_MAX_QUEUES);
+						   avp_net_init,
+						   WRS_AVP_MAX_QUEUES,
+						   WRS_AVP_MAX_QUEUES);
 		}
+
 		if (net_dev == NULL) {
 			AVP_ERR("error allocating device 0x%llx\n", dev_info->device_id);
 			return -EBUSY;
@@ -908,8 +892,7 @@ avp_dev_create(struct wrs_avp_device_info *dev_info, struct device *parent, stru
 		}
 
 		avp->host_features = dev_info->features;
-		if (avp->host_features & WRS_AVP_FEATURE_VLAN_OFFLOAD)
-		{
+		if (avp->host_features & WRS_AVP_FEATURE_VLAN_OFFLOAD) {
 			/*
 			 * We always enable VLAN offload during initial device setup.  In
 			 * the future we may choose to support ethtool operations to
@@ -921,8 +904,7 @@ avp_dev_create(struct wrs_avp_device_info *dev_info, struct device *parent, stru
 		}
 
 		avp->mode = dev_info->mode;
-		if (avp->mode != WRS_AVP_MODE_TRACE)
-		{
+		if (avp->mode != WRS_AVP_MODE_TRACE) {
 			memcpy(net_dev->dev_addr, dev_info->ethaddr, ETH_ALEN);
 			if (!is_valid_ether_addr(net_dev->dev_addr)) {
 				AVP_ERR("error validating MAC address: %pM\n", &net_dev->dev_addr);
@@ -931,20 +913,18 @@ avp_dev_create(struct wrs_avp_device_info *dev_info, struct device *parent, stru
 			}
 		}
 		reused = 0;
-	}
-	else {
+	} else {
 		avp = (*avpptr);
 		net_dev = avp->net_dev;
 		reused = 1;
 		AVP_INFO("attaching netdev %s to new v%u.%u.%u device 0x%llx\n",
-				 net_dev->name,
-                 WRS_AVP_GET_RELEASE_VERSION(dev_info->version),
-                 WRS_AVP_GET_MAJOR_VERSION(dev_info->version),
-                 WRS_AVP_GET_MINOR_VERSION(dev_info->version),
-                 dev_info->device_id);
+			 net_dev->name,
+			 WRS_AVP_GET_RELEASE_VERSION(dev_info->version),
+			 WRS_AVP_GET_MAJOR_VERSION(dev_info->version),
+			 WRS_AVP_GET_MINOR_VERSION(dev_info->version),
+			 dev_info->device_id);
 
-		if ((dev_info->features & avp->features) != avp->features)
-		{
+		if ((dev_info->features & avp->features) != avp->features) {
 			AVP_ERR("netdev %s host features mismatched; 0x%08x, host=0x%08x\n",
 					net_dev->name, avp->features, dev_info->features);
 			/* This should not be possible; continue for now */
@@ -957,7 +937,7 @@ avp_dev_create(struct wrs_avp_device_info *dev_info, struct device *parent, stru
 	ret = avp_dev_configure(avp, dev_info);
 	if (ret < 0) {
 		AVP_ERR("failed to configure device 0x%llx\n", dev_info->device_id);
-        goto cleanup;
+		goto cleanup;
 	}
 
 	if (!reused) {
@@ -973,17 +953,16 @@ avp_dev_create(struct wrs_avp_device_info *dev_info, struct device *parent, stru
 
 		AVP_INFO("registered netdev %s for v%u.%u.%u device 0x%llx\n",
 				 net_dev->name,
-                 WRS_AVP_GET_RELEASE_VERSION(dev_info->version),
-                 WRS_AVP_GET_MAJOR_VERSION(dev_info->version),
-                 WRS_AVP_GET_MINOR_VERSION(dev_info->version),
-                 dev_info->device_id);
+			 WRS_AVP_GET_RELEASE_VERSION(dev_info->version),
+			 WRS_AVP_GET_MAJOR_VERSION(dev_info->version),
+			 WRS_AVP_GET_MINOR_VERSION(dev_info->version),
+			 dev_info->device_id);
 
 		/* add to device list (only once) */
 		down_write(&avp_list_lock);
 		list_add(&avp->list, &avp_list_head);
 		up_write(&avp_list_lock);
-	}
-	else {
+	} else {
 		if (net_dev->flags & IFF_UP) {
 			netif_carrier_on(net_dev);
 			netif_tx_start_all_queues(net_dev);
@@ -995,13 +974,10 @@ avp_dev_create(struct wrs_avp_device_info *dev_info, struct device *parent, stru
 	list_add(&avp->poll, &avp_poll_head);
 	up_write(&avp_poll_lock);
 
-	if (avp->mode == WRS_AVP_MODE_TRACE)
-	{
+	if (avp->mode == WRS_AVP_MODE_TRACE) {
 		/* assign device to thread for trace processing */
 		avp_trace_dev_add(avp);
-	}
-	else
-	{
+	} else {
 		/* assign device to threads for receive processing */
 		avp_thread_dev_add(avp);
 	}
@@ -1024,13 +1000,10 @@ _avp_dev_release(struct avp_dev *dev)
 	/* Inform the host that we are shutting down. */
 	avp_ctrl_shutdown(dev);
 
-	if (dev->mode == WRS_AVP_MODE_TRACE)
-	{
+	if (dev->mode == WRS_AVP_MODE_TRACE) {
 		/* unassign from receive threads */
 		avp_trace_dev_remove(dev);
-	}
-	else
-	{
+	} else {
 		/* unassign from receive threads */
 		avp_thread_dev_remove(dev);
 	}
@@ -1134,7 +1107,7 @@ avp_ioctl_query(unsigned int ioctl_num, unsigned long ioctl_param)
 		return -EINVAL;
 
 	/* get device id from user space */
-	ret = copy_from_user(&dev_config, (void*)ioctl_param, sizeof(dev_config));
+	ret = copy_from_user(&dev_config, (void *)ioctl_param, sizeof(dev_config));
 	if (ret) {
 		AVP_ERR("failed to copy from user space\n");
 		return -EIO;
@@ -1150,15 +1123,15 @@ avp_ioctl_query(unsigned int ioctl_num, unsigned long ioctl_param)
 	/* update device info */
 	memset(&dev_config, 0, sizeof(dev_config));
 	dev_config.device_id = dev->device_id;
-    dev_config.driver_type = WRS_AVP_DRIVER_TYPE_KERNEL;
-    dev_config.driver_version = WRS_AVP_KERNEL_DRIVER_VERSION;
+	dev_config.driver_type = WRS_AVP_DRIVER_TYPE_KERNEL;
+	dev_config.driver_version = WRS_AVP_KERNEL_DRIVER_VERSION;
 	dev_config.features = dev->features;
 	dev_config.num_tx_queues = dev->num_tx_queues;
 	dev_config.num_rx_queues = dev->num_rx_queues;
-    dev_config.if_up = !!(dev->net_dev->flags & IFF_UP);
+	dev_config.if_up = !!(dev->net_dev->flags & IFF_UP);
 
 	/* return to user space */
-	ret = copy_to_user((void*)ioctl_param, &dev_config, sizeof(dev_config));
+	ret = copy_to_user((void *)ioctl_param, &dev_config, sizeof(dev_config));
 	if (ret) {
 		AVP_ERR("failed to copy to user space\n");
 		return -EIO;
@@ -1169,12 +1142,12 @@ avp_ioctl_query(unsigned int ioctl_num, unsigned long ioctl_param)
 
 static int
 avp_ioctl(struct inode *inode,
-		  unsigned int ioctl_num,
-		  unsigned long ioctl_param)
+	  unsigned int ioctl_num,
+	  unsigned long ioctl_param)
 {
 	int ret = -EINVAL;
 
-	AVP_DBG("IOCTL num=0x%0x param=0x%0lx \n", ioctl_num, ioctl_param);
+	AVP_DBG("IOCTL num=0x%0x param=0x%0lx\n", ioctl_num, ioctl_param);
 
 	switch (_IOC_NR(ioctl_num)) {
 	case _IOC_NR(WRS_AVP_IOCTL_CREATE):
@@ -1196,8 +1169,8 @@ avp_ioctl(struct inode *inode,
 
 static int
 avp_compat_ioctl(struct inode *inode,
-				 unsigned int ioctl_num,
-				 unsigned long ioctl_param)
+		 unsigned int ioctl_num,
+		 unsigned long ioctl_param)
 {
 	/* 32 bit application on 64 bit kernel */
 	AVP_ERR("IOCTL 0x%0x not implemented\n", ioctl_num);
@@ -1262,7 +1235,7 @@ avp_file_release(struct inode *inode, struct file *file)
  *
  *****************************************************************************/
 
-static struct file_operations avp_fops = {
+const struct file_operations avp_fops = {
 	.owner = THIS_MODULE,
 	.open = avp_file_open,
 	.release = avp_file_release,
@@ -1307,39 +1280,39 @@ avp_parse_kthread_cpulist(void)
 static int __init
 avp_validate_kthread_sched(void)
 {
-    switch (kthread_policy) {
-        case SCHED_NORMAL:
-            AVP_INFO("Setting AVP kthread priority to zero for default policy\n");
-            kthread_priority = 0;
-            break;
+	switch (kthread_policy) {
+	case SCHED_NORMAL:
+		AVP_INFO("Setting AVP kthread priority to zero for default policy\n");
+		kthread_priority = 0;
+		break;
 
-        case SCHED_FIFO:
-        case SCHED_RR:
-            if ((kthread_priority < 1) || (kthread_priority > 99)) {
-                AVP_ERR("Invalid AVP kthread RT priority: %d\n", kthread_priority);
-                return -EINVAL;
-            }
-            break;
+	case SCHED_FIFO:
+	case SCHED_RR:
+		if ((kthread_priority < 1) || (kthread_priority > 99)) {
+			AVP_ERR("Invalid AVP kthread RT priority: %d\n", kthread_priority);
+			return -EINVAL;
+		}
+		break;
 
-        default:
-            AVP_ERR("Unsupported scheduler policy: %d\n", kthread_policy);
-            return -EINVAL;
-    }
+	default:
+		AVP_ERR("Unsupported scheduler policy: %d\n", kthread_policy);
+		return -EINVAL;
+	}
 
-    return 0;
+	return 0;
 }
 
 
 static int __init
 avp_init(void)
 {
-    uint32_t version = WRS_AVP_KERNEL_DRIVER_VERSION;
+	uint32_t version = WRS_AVP_KERNEL_DRIVER_VERSION;
 	int ret;
 
 	AVP_PRINT("######## DPDK AVP module loading v%u.%u.%u ########\n",
-              WRS_AVP_GET_RELEASE_VERSION(version),
-              WRS_AVP_GET_MAJOR_VERSION(version),
-              WRS_AVP_GET_MINOR_VERSION(version));
+		  WRS_AVP_GET_RELEASE_VERSION(version),
+		  WRS_AVP_GET_MAJOR_VERSION(version),
+		  WRS_AVP_GET_MINOR_VERSION(version));
 
 	if (avp_parse_kthread_cpulist() < 0) {
 		AVP_ERR("Invalid parameter for kthread_cpu list\n");

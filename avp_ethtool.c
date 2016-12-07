@@ -49,10 +49,9 @@ avp_get_drvinfo(struct net_device *netdev,
 	strlcpy(drvinfo->driver, WRS_AVP_DRIVER_NAME, sizeof(drvinfo->driver));
 	strlcpy(drvinfo->version, driver_version, sizeof(drvinfo->version));
 
-	if(avp->pci_dev) {
+	if (avp->pci_dev)
 		strlcpy(drvinfo->bus_info, pci_name(avp->pci_dev),
 			sizeof(drvinfo->bus_info) - 1);
-	}
 }
 
 static int
@@ -102,5 +101,5 @@ static const struct ethtool_ops avp_ethtool_ops = {
 void
 avp_set_ethtool_ops(struct net_device *netdev)
 {
-    netdev->ethtool_ops =  &avp_ethtool_ops;
+	netdev->ethtool_ops =  &avp_ethtool_ops;
 }

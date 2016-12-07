@@ -51,16 +51,14 @@
 /* Defines the maximum number of packets to be received in one try */
 #define WRS_AVP_MBUF_BURST_SZ 32
 
-int avp_net_rx(struct avp_dev *avp, unsigned qnum);
 
 static int
 avp_net_open(struct net_device *dev)
 {
 	struct avp_dev *avp = netdev_priv(dev);
 
-	if (avp->status == WRS_AVP_DEV_STATUS_DETACHED) {
+	if (avp->status == WRS_AVP_DEV_STATUS_DETACHED)
 		return -EBUSY;
-	}
 
 	netif_carrier_on(dev);
 	netif_tx_start_all_queues(dev);
@@ -73,9 +71,8 @@ avp_net_release(struct net_device *dev)
 {
 	struct avp_dev *avp = netdev_priv(dev);
 
-	if (avp->status == WRS_AVP_DEV_STATUS_DETACHED) {
+	if (avp->status == WRS_AVP_DEV_STATUS_DETACHED)
 		return -EBUSY;
-	}
 
 	netif_carrier_off(dev);
 	netif_tx_stop_all_queues(dev);
@@ -100,9 +97,8 @@ avp_net_translate_buffer(struct avp_dev *avp, void *addr)
 
 	for (i = 0; i < WRS_AVP_MAX_MEMPOOLS; i++) {
 		pool = &avp->pool[i];
-		if ((pool != NULL) && (addr >= pool->va) && (addr < (pool->va + pool->length))) {
+		if ((pool != NULL) && (addr >= pool->va) && (addr < (pool->va + pool->length)))
 			return addr - pool->va + pool->kva;
-		}
 	}
 
 	BUG_ON(0);
@@ -116,8 +112,8 @@ avp_net_translate_buffer(struct avp_dev *avp, void *addr)
  */
 static inline int
 avp_net_copy_from_mbufs(struct avp_dev *avp,
-						struct wrs_avp_mbuf *pkt_kva,
-						struct sk_buff *skb)
+			struct wrs_avp_mbuf *pkt_kva,
+			struct sk_buff *skb)
 {
 	struct wrs_avp_mbuf *next_va;
 	size_t offset = 0;
@@ -128,7 +124,7 @@ avp_net_copy_from_mbufs(struct avp_dev *avp,
 	skb_put(skb, pkt_kva->pkt_len);
 
 	if (pkt_kva->ol_flags & WRS_AVP_RX_VLAN_PKT) {
-#if ( LINUX_VERSION_CODE < KERNEL_VERSION(3,10,0) )
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 10, 0))
 		__vlan_hwaccel_put_tag(skb, pkt_kva->vlan_tci);
 #else
 		__vlan_hwaccel_put_tag(skb, ntohs(ETH_P_8021Q), pkt_kva->vlan_tci);
@@ -137,21 +133,20 @@ avp_net_copy_from_mbufs(struct avp_dev *avp,
 
 	do {
 		/* translate the host buffer to guest addressing */
-		data_kva = avp_net_translate_buffer(avp, (void*)pkt_kva->data);
+		data_kva = avp_net_translate_buffer(avp, (void *)pkt_kva->data);
 
 		ret = skb_store_bits(skb, offset, data_kva, pkt_kva->data_len);
 		if (ret) {
 			AVP_ERR_RATELIMIT("skb->len=%u, offset=%zu, data_len=%u\n",
-                              skb->len, offset, pkt_kva->data_len);
+					  skb->len, offset, pkt_kva->data_len);
 			return ret;
 		}
 
 		/* advance to the next segment */
 		offset += pkt_kva->data_len;
 		next_va = pkt_kva->next;
-		if (next_va) {
-			pkt_kva = avp_net_translate_buffer(avp, (void*)next_va);
-		}
+		if (next_va)
+			pkt_kva = avp_net_translate_buffer(avp, (void *)next_va);
 
 	} while (next_va);
 
@@ -181,8 +176,8 @@ avp_net_rx(struct avp_dev *avp, unsigned qnum)
 		stats->rx_fifo_errors++;
 
 	/* Calculate the number of entries to dequeue in rx_q */
-	num = min(num_rq, num_fq);
-	num = min(num, (unsigned)WRS_AVP_MBUF_BURST_SZ);
+	num = min_t(unsigned, num_rq, num_fq);
+	num = min_t(unsigned, num, (unsigned)WRS_AVP_MBUF_BURST_SZ);
 
 	/* Return if no entry in rx_q and no free entry in free_q */
 	if (num == 0)
@@ -198,12 +193,12 @@ avp_net_rx(struct avp_dev *avp, unsigned qnum)
 
 		/* prefetch next entry while process current one */
 		if (i < num-1) {
-			pkt_buf = avp_net_translate_buffer(avp, (void*)avp_bufs[i+1]);
+			pkt_buf = avp_net_translate_buffer(avp, (void *)avp_bufs[i+1]);
 			prefetch(pkt_buf);
 		}
 
 		/* peek in to the first mbuf to determine total length */
-		pkt_buf = avp_net_translate_buffer(avp, (void*)avp_bufs[i]);
+		pkt_buf = avp_net_translate_buffer(avp, (void *)avp_bufs[i]);
 		pkt_len = pkt_buf->pkt_len;
 
 		/*
@@ -261,9 +256,9 @@ avp_net_rx(struct avp_dev *avp, unsigned qnum)
  */
 static inline int
 avp_net_copy_to_mbufs(struct avp_dev *avp,
-					  struct sk_buff *skb,
-					  struct wrs_avp_mbuf **mbufs,
-					  unsigned count)
+		      struct sk_buff *skb,
+		      struct wrs_avp_mbuf **mbufs,
+		      unsigned count)
 {
 	struct wrs_avp_mbuf *previous_kva = NULL;
 	struct wrs_avp_mbuf *first_kva = NULL;
@@ -276,8 +271,7 @@ avp_net_copy_to_mbufs(struct avp_dev *avp,
 	unsigned i;
 	int ret;
 
-	for (i = 0; i < count; i++)
-	{
+	for (i = 0; i < count; i++) {
 		buf = mbufs[i];
 
 		/* translate the host buffer to guest addressing */
@@ -296,11 +290,12 @@ avp_net_copy_to_mbufs(struct avp_dev *avp,
 		/* copy the data from the SKB to the mbuf */
 		copy_length = min_t(unsigned, skb->len - offset, avp->mbuf_size);
 		ret = skb_copy_bits(skb, offset, data_kva, copy_length);
-        if (ret) {
-            AVP_ERR_RATELIMIT("skb->len=%u, offset=%u, copy=%u, i=%u/%u\n",
-                              skb->len, offset, copy_length, i, count);
-            return ret;
-        }
+
+		if (ret) {
+			AVP_ERR_RATELIMIT("skb->len=%u, offset=%u, copy=%u, i=%u/%u\n",
+					  skb->len, offset, copy_length, i, count);
+			return ret;
+		}
 
 		offset += copy_length;
 		pkt_kva->data_len = copy_length;
@@ -313,17 +308,17 @@ avp_net_copy_to_mbufs(struct avp_dev *avp,
 	first_kva->pkt_len = skb->len;
 
 #ifdef skb_vlan_tag_present
-    if (skb_vlan_tag_present(skb)) {
+	if (skb_vlan_tag_present(skb)) {
 #else
-    if (vlan_tx_tag_present(skb)) {
+	if (vlan_tx_tag_present(skb)) {
 #endif
-        first_kva->ol_flags |= WRS_AVP_TX_VLAN_PKT;
+		first_kva->ol_flags |= WRS_AVP_TX_VLAN_PKT;
 #ifdef skb_vlan_tag_get
-        first_kva->vlan_tci = skb_vlan_tag_get(skb);
+		first_kva->vlan_tci = skb_vlan_tag_get(skb);
 #else
-        first_kva->vlan_tci = vlan_tx_tag_get(skb);
+		first_kva->vlan_tci = vlan_tx_tag_get(skb);
 #endif
-    } else {
+	} else {
 		first_kva->ol_flags = 0;
 		first_kva->vlan_tci = 0;
 	}
@@ -346,7 +341,7 @@ avp_net_tx(struct sk_buff *skb, struct net_device *dev)
 	unsigned count;
 	unsigned qnum;
 
-#if ( LINUX_VERSION_CODE < KERNEL_VERSION(4,7,0) )
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 7, 0))
 	dev->trans_start = jiffies; /* save the timestamp */
 #else
 	netif_trans_update(dev);
@@ -354,16 +349,15 @@ avp_net_tx(struct sk_buff *skb, struct net_device *dev)
 
     /* Determine how many mbufs are required to send this packet */
 	count = (skb->len + avp->mbuf_size - 1) / avp->mbuf_size;
-    if (unlikely(count == 0)) {
-        AVP_ERR_RATELIMIT("dropping zero length packet on %s\n", dev->name);
-        goto drop;
-    }
-    else if (unlikely(count > WRS_AVP_MAX_MBUF_SEGMENTS)) {
-        AVP_ERR_RATELIMIT("dropping oversized packet on %s\n", dev->name);
-        goto drop;
-    }
+	if (unlikely(count == 0)) {
+		AVP_ERR_RATELIMIT("dropping zero length packet on %s\n", dev->name);
+		goto drop;
+	} else if (unlikely(count > WRS_AVP_MAX_MBUF_SEGMENTS)) {
+		AVP_ERR_RATELIMIT("dropping oversized packet on %s\n", dev->name);
+		goto drop;
+	}
 
-    qnum = skb_get_queue_mapping(skb);
+	qnum = skb_get_queue_mapping(skb);
 	BUG_ON(qnum > avp->num_tx_queues);
 
 	tx_q = avp->tx_q[qnum];
@@ -374,9 +368,8 @@ avp_net_tx(struct sk_buff *skb, struct net_device *dev)
 	 * Check if it has at least one free entry in tx_q and
 	 * sufficient entries in the alloc_q.
 	 */
-	if (avp_fifo_free_count(tx_q) == 0) {
+	if (avp_fifo_free_count(tx_q) == 0)
 		goto drop;
-	}
 
 	if (mbuf_cache->count < count) {
 		/* refill the cache */
@@ -399,7 +392,7 @@ avp_net_tx(struct sk_buff *skb, struct net_device *dev)
 
 		for (i = 0; i < num; i++) {
 			pkt_va = mbuf_cache->mbufs[mbuf_cache->count + i];
-			pkt_kva = avp_net_translate_buffer(avp,(void*)pkt_va);
+			pkt_kva = avp_net_translate_buffer(avp, (void *)pkt_va);
 			prefetch(pkt_kva);
 		}
 		mbuf_cache->count += num;
@@ -407,12 +400,12 @@ avp_net_tx(struct sk_buff *skb, struct net_device *dev)
 
 	/* copy the skb to one of more mbufs */
 	ret = avp_net_copy_to_mbufs(avp,
-								skb,
-								&mbuf_cache->mbufs[mbuf_cache->count - count],
-								count);
-	if (unlikely(ret != 0)) {
+				    skb,
+				    &mbuf_cache->mbufs[mbuf_cache->count - count],
+				    count);
+	if (unlikely(ret != 0))
 		goto drop;
-	}
+
 	mbuf_cache->count -= count;
 
 	/* enqueue mbuf into tx_q */
@@ -478,7 +471,7 @@ avp_trace_rx(struct sk_buff **pskb)
 
 #ifdef WRS_AVP_TX_TIMEOUTS
 static void
-avp_net_tx_timeout (struct net_device *dev)
+avp_net_tx_timeout(struct net_device *dev)
 {
 	struct avp_dev *avp = netdev_priv(dev);
 	struct avp_stats *stats = this_cpu_ptr(avp->stats);
@@ -509,7 +502,7 @@ avp_net_change_mtu(struct net_device *dev, int new_mtu)
 
 	AVP_DBG("%s updating mtu to %u\n", new_mtu);
 
-    dev->mtu = new_mtu;
+	dev->mtu = new_mtu;
 
 	return 0;
 }
@@ -562,8 +555,8 @@ avp_net_stats(struct net_device *dev, struct rtnl_link_stats64 *tot)
 
 static int
 avp_net_header(struct sk_buff *skb, struct net_device *dev,
-		unsigned short type, const void *daddr,
-		const void *saddr, unsigned int len)
+	       unsigned short type, const void *daddr,
+	       const void *saddr, unsigned int len)
 {
 	struct ethhdr *eth = (struct ethhdr *) skb_push(skb, ETH_HLEN);
 
@@ -571,11 +564,11 @@ avp_net_header(struct sk_buff *skb, struct net_device *dev,
 	memcpy(eth->h_dest, daddr ? daddr : dev->dev_addr, dev->addr_len);
 	eth->h_proto = htons(type);
 
-	return (dev->hard_header_len);
+	return dev->hard_header_len;
 }
 
 
-#if ( LINUX_VERSION_CODE < KERNEL_VERSION(4,1,0) )
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0))
 static int
 avp_net_rebuild_header(struct sk_buff *skb)
 {
@@ -592,8 +585,8 @@ avp_net_rebuild_header(struct sk_buff *skb)
 
 static const struct header_ops avp_net_header_ops = {
 	.create	 = avp_net_header,
-#if ( LINUX_VERSION_CODE < KERNEL_VERSION(4,1,0) )
-    .rebuild = avp_net_rebuild_header,
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 1, 0))
+	.rebuild = avp_net_rebuild_header,
 #endif
 	.cache	 = NULL,  /* disable caching */
 };

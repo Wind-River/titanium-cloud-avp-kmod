@@ -83,7 +83,7 @@ struct avp_stats {
  * A structure to hold per-cpu cache of allocated mbufs
  */
 struct avp_mbuf_cache {
-	struct wrs_avp_mbuf * mbufs[WRS_AVP_QUEUE_MBUF_CACHE_SIZE];
+	struct wrs_avp_mbuf *mbufs[WRS_AVP_QUEUE_MBUF_CACHE_SIZE];
 	unsigned count;
 } ____cacheline_internodealigned_in_smp;
 
@@ -91,9 +91,9 @@ struct avp_mbuf_cache {
  * A structure describing the translation parameters for each pool
  */
 struct avp_mempool_info {
-    void *va; /**< host virtual address */
-    void *kva; /**< kernel virtual address */
-    size_t length; /**< region length in bytes */
+	void *va; /**< host virtual address */
+	void *kva; /**< kernel virtual address */
+	size_t length; /**< region length in bytes */
 };
 
 /**
@@ -157,8 +157,8 @@ struct avp_dev {
 	void *sync_kva;
 	void *sync_va;
 
-    /* per-socket mbuf pools */
-    struct avp_mempool_info pool[WRS_AVP_MAX_MEMPOOLS];
+	/* per-socket mbuf pools */
+	struct avp_mempool_info pool[WRS_AVP_MAX_MEMPOOLS];
 
 	/* data buffer address references */
 	void *mbuf_kva;
@@ -185,7 +185,7 @@ struct avp_dev {
  * Structure to hold the receive queue data
  */
 struct avp_dev_rx_queue {
-	struct avp_dev * avp;
+	struct avp_dev *avp;
 	unsigned int queue_id;
 };
 
@@ -195,21 +195,42 @@ struct avp_dev_rx_queue {
 struct avp_thread {
 	struct task_struct *avp_kthread;
 	int cpu;
-        int sched_policy;
-        int sched_priority;
+	int sched_policy;
+	int sched_priority;
 	spinlock_t lock;
 	unsigned int rx_count;
 	struct avp_dev_rx_queue rx_queues[WRS_AVP_KTHREAD_MAX_RX_QUEUES];
 };
 
+/**
+ * External declarations
+ */
+extern int avp_net_rx(struct avp_dev *avp, unsigned qnum);
+extern void avp_net_init(struct net_device *dev);
+extern void avp_trace_init(struct net_device *dev);
+extern void avp_set_ethtool_ops(struct net_device *netdev);
+extern int avp_net_rx(struct avp_dev *avp, unsigned qnum);
+extern int avp_dev_create(struct wrs_avp_device_info *dev_info,
+			  struct device *parent,
+			  struct avp_dev **avpptr);
+extern int avp_dev_detach(struct avp_dev *avp);
+extern int avp_dev_release(uint64_t device_id);
+/* Utility functions from avp_pci.c */
+extern int avp_pci_init(void);
+extern void avp_pci_exit(void);
+
+
+/**
+ * Debug logging utilities
+ */
 #define AVP_ERR_RATELIMIT(args...) printk_ratelimited(KERN_ERR "AVP: Error: " args)
-#define AVP_ERR(args...) printk(KERN_ERR "AVP: Error: " args)
-#define AVP_INFO(args...) printk(KERN_DEBUG "AVP: " args)
-#define AVP_PRINT(args...) printk(KERN_DEBUG "AVP: " args)
+#define AVP_ERR(args...) pr_err("AVP: Error: " args)
+#define AVP_INFO(args...) pr_debug("AVP: " args)
+#define AVP_PRINT(args...) pr_debug("AVP: " args)
 #ifdef WRS_AVP_KMOD_DEBUG
-	#define AVP_DBG(args...) printk(KERN_DEBUG "AVP: " args)
+#define AVP_DBG(args...) pr_debug("AVP: " args)
 #else
-	#define AVP_DBG(args...)
+#define AVP_DBG(args...)
 #endif
 
 #endif

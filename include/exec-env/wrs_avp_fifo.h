@@ -76,14 +76,14 @@
 static inline void
 avp_fifo_init(struct wrs_avp_fifo *fifo, unsigned size)
 {
-    /* Ensure size is power of 2 */
-    if (size & (size - 1))
-        rte_panic("AVP fifo size must be power of 2\n");
+	/* Ensure size is power of 2 */
+	if (size & (size - 1))
+		rte_panic("AVP fifo size must be power of 2\n");
 
-    fifo->write = 0;
-    fifo->read = 0;
-    fifo->len = size;
-    fifo->elem_size = sizeof(void *);
+	fifo->write = 0;
+	fifo->read = 0;
+	fifo->len = size;
+	fifo->elem_size = sizeof(void *);
 }
 #endif
 
@@ -93,22 +93,22 @@ avp_fifo_init(struct wrs_avp_fifo *fifo, unsigned size)
 static inline unsigned
 avp_fifo_put(struct wrs_avp_fifo *fifo, void **data, unsigned num)
 {
-    unsigned i = 0;
-    unsigned fifo_write = fifo->write;
-    unsigned fifo_read = fifo->read;
-    unsigned new_write = fifo_write;
+	unsigned i = 0;
+	unsigned fifo_write = fifo->write;
+	unsigned fifo_read = fifo->read;
+	unsigned new_write = fifo_write;
 
-    for (i = 0; i < num; i++) {
-        new_write = (new_write + 1) & (fifo->len - 1);
+	for (i = 0; i < num; i++) {
+		new_write = (new_write + 1) & (fifo->len - 1);
 
-        if (new_write == fifo_read)
-            break;
-        fifo->buffer[fifo_write] = data[i];
-        fifo_write = new_write;
-    }
-    AVP_WMB();
-    fifo->write = fifo_write;
-    return i;
+		if (new_write == fifo_read)
+			break;
+		fifo->buffer[fifo_write] = data[i];
+		fifo_write = new_write;
+	}
+	AVP_WMB();
+	fifo->write = fifo_write;
+	return i;
 }
 
 /**
@@ -117,22 +117,23 @@ avp_fifo_put(struct wrs_avp_fifo *fifo, void **data, unsigned num)
 static inline unsigned
 avp_fifo_get(struct wrs_avp_fifo *fifo, void **data, unsigned num)
 {
-    unsigned i = 0;
-    unsigned new_read = fifo->read;
-    unsigned fifo_write = fifo->write;
+	unsigned i = 0;
+	unsigned new_read = fifo->read;
+	unsigned fifo_write = fifo->write;
 
-    if (new_read == fifo_write) return 0; /* empty */
+	if (new_read == fifo_write)
+		return 0; /* empty */
 
-    for (i = 0; i < num; i++) {
-        if (new_read == fifo_write)
-            break;
+	for (i = 0; i < num; i++) {
+		if (new_read == fifo_write)
+			break;
 
-        data[i] = fifo->buffer[new_read];
-        new_read = (new_read + 1) & (fifo->len - 1);
-    }
-    AVP_RMB();
-    fifo->read = new_read;
-    return i;
+		data[i] = fifo->buffer[new_read];
+		new_read = (new_read + 1) & (fifo->len - 1);
+	}
+	AVP_RMB();
+	fifo->read = new_read;
+	return i;
 }
 
 /**
@@ -141,7 +142,7 @@ avp_fifo_get(struct wrs_avp_fifo *fifo, void **data, unsigned num)
 static inline unsigned
 avp_fifo_count(struct wrs_avp_fifo *fifo)
 {
-    return (fifo->len + fifo->write - fifo->read) & ( fifo->len - 1);
+	return (fifo->len + fifo->write - fifo->read) & (fifo->len - 1);
 }
 
 /**
@@ -150,7 +151,7 @@ avp_fifo_count(struct wrs_avp_fifo *fifo)
 static inline unsigned
 avp_fifo_free_count(struct wrs_avp_fifo *fifo)
 {
-    return (fifo->read - fifo->write - 1) & (fifo->len - 1);
+	return (fifo->read - fifo->write - 1) & (fifo->len - 1);
 }
 
 #endif /* _WRS_AVP_FIFO_H_ */

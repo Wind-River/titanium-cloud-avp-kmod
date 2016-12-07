@@ -27,7 +27,7 @@
  *   BSD LICENSE
  *
  *   Copyright(c) 2010-2013 Intel Corporation. All rights reserved.
- *   Copyright(c) 2014 Wind River Systems, Inc. All rights reserved.
+ *   Copyright(c) 2014-2016 Wind River Systems, Inc. All rights reserved.
  *   All rights reserved.
  *
  *   Redistribution and use in source and binary forms, with or without
@@ -103,7 +103,7 @@ enum wrs_avp_req_id {
 /**@} */
 
 /**@{ AVP device operational modes */
-#define WRS_AVP_MODE_HOST 0  /**< AVP interface created in host */
+#define WRS_AVP_MODE_HOST 0 /**< AVP interface created in host */
 #define WRS_AVP_MODE_GUEST 1 /**< AVP interface created for export to guest */
 #define WRS_AVP_MODE_TRACE 2 /**< AVP interface created for packet tracing */
 /**@} */
@@ -112,27 +112,27 @@ enum wrs_avp_req_id {
  * Structure for AVP queue configuration query request/result
  */
 struct wrs_avp_device_config {
-	uint64_t device_id;  /**< Unique system identifier */
-    uint32_t driver_type; /**< Device Driver type */
-    uint32_t driver_version; /**< Device Driver version */
-    uint32_t features; /**< Negotiated features */
-	uint16_t num_tx_queues; /**< Number of active transmit queues */
-	uint16_t num_rx_queues; /**< Number of active receive queues */
-    uint8_t if_up; /**< 1: interface up, 0: interface down */
-} __attribute__((__packed__));
+	uint64_t device_id;	/**< Unique system identifier */
+	uint32_t driver_type; /**< Device Driver type */
+	uint32_t driver_version; /**< Device Driver version */
+	uint32_t features; /**< Negotiated features */
+	uint16_t num_tx_queues;	/**< Number of active transmit queues */
+	uint16_t num_rx_queues;	/**< Number of active receive queues */
+	uint8_t if_up; /**< 1: interface up, 0: interface down */
+} __attribute__ ((__packed__));
 
 /*
  * Structure for AVP request.
  */
 struct wrs_avp_request {
-	uint32_t req_id;             /**< Request id */
+	uint32_t req_id; /**< Request id */
 	union {
-		uint32_t new_mtu;    /**< New MTU */
-		uint8_t if_up;       /**< 1: interface up, 0: interface down */
-		struct wrs_avp_device_config config; /**< Queue configuration */
+		uint32_t new_mtu; /**< New MTU */
+		uint8_t if_up;	/**< 1: interface up, 0: interface down */
+	struct wrs_avp_device_config config; /**< Queue configuration */
 	};
-	int32_t result;               /**< Result for processing request */
-} __attribute__((__packed__));
+	int32_t result;	/**< Result for processing request */
+} __attribute__ ((__packed__));
 
 /*
  * FIFO struct mapped in a shared memory. It describes a circular buffer FIFO
@@ -140,11 +140,11 @@ struct wrs_avp_request {
  * Writing should never overwrite the read position
  */
 struct wrs_avp_fifo {
-	volatile unsigned write;     /**< Next position to be written*/
-	volatile unsigned read;      /**< Next position to be read */
-	unsigned len;                /**< Circular buffer length */
-	unsigned elem_size;          /**< Pointer size - for 32/64 bit OS */
-	void * volatile buffer[0];   /**< The buffer contains mbuf pointers */
+	volatile unsigned write; /**< Next position to be written*/
+	volatile unsigned read; /**< Next position to be read */
+	unsigned len; /**< Circular buffer length */
+	unsigned elem_size; /**< Pointer size - for 32/64 bit OS */
+	void *volatile buffer[0]; /**< The buffer contains mbuf pointers */
 };
 
 
@@ -153,19 +153,19 @@ struct wrs_avp_fifo {
  */
 struct wrs_avp_mbuf {
 	uint64_t pad0;
-	void *pkt_mbuf;         /**< Reference to packet mbuf */
+	void *pkt_mbuf; /**< Reference to packet mbuf */
 	uint8_t pad1[14];
-	uint16_t ol_flags;      /**< Offload features. */
-	void *next;             /**< Reference to next buffer in chain */
-	void *data;             /**< Start address of data in segment buffer. */
-	uint16_t data_len;      /**< Amount of data in segment buffer. */
-    uint8_t nb_segs;        /**< Number of segments */
+	uint16_t ol_flags; /**< Offload features. */
+	void *next;	/**< Reference to next buffer in chain */
+	void *data;	/**< Start address of data in segment buffer. */
+	uint16_t data_len; /**< Amount of data in segment buffer. */
+	uint8_t nb_segs; /**< Number of segments */
 	uint8_t pad2;
-	uint16_t pkt_len;       /**< Total pkt len: sum of all segment data_len. */
-    uint32_t pad3;
-    uint16_t vlan_tci;      /**< VLAN Tag Control Identifier (CPU order). */
-    uint32_t pad4;
-} __attribute__((__aligned__(WRS_AVP_ALIGNMENT), __packed__));
+	uint16_t pkt_len; /**< Total pkt len: sum of all segment data_len. */
+	uint32_t pad3;
+	uint16_t vlan_tci; /**< VLAN Tag Control Identifier (CPU order). */
+	uint32_t pad4;
+} __attribute__ ((__aligned__(WRS_AVP_ALIGNMENT), __packed__));
 
 
 /**{ AVP device features */
@@ -207,7 +207,7 @@ struct wrs_avp_mbuf {
 /**@} */
 
 /**@{ AVP PCI MSI-X vectors */
-#define WRS_AVP_MIGRATION_MSIX_VECTOR 0 /**< Migration interrupts */
+#define WRS_AVP_MIGRATION_MSIX_VECTOR 0	/**< Migration interrupts */
 #define WRS_AVP_MAX_MSIX_VECTORS 1
 /**@} */
 
@@ -241,9 +241,9 @@ struct wrs_avp_mbuf {
  * Description of a single memory region
  */
 struct wrs_avp_memmap {
-    void *addr;
-    phys_addr_t phys_addr;
-    uint64_t length;
+	void *addr;
+	phys_addr_t phys_addr;
+	uint64_t length;
 };
 
 /*
@@ -260,10 +260,10 @@ struct wrs_avp_memmap {
  * Defines a list of memory regions exported from the host to the guest
  */
 struct wrs_avp_memmap_info {
-    uint32_t magic; /**< Memory validation marker */
-    uint32_t version; /**< Data format version */
-    uint32_t nb_maps;
-    struct wrs_avp_memmap maps[WRS_AVP_MAX_MAPS];
+	uint32_t magic; /**< Memory validation marker */
+	uint32_t version; /**< Data format version */
+	uint32_t nb_maps;
+	struct wrs_avp_memmap maps[WRS_AVP_MAX_MAPS];
 };
 
 /*
@@ -294,7 +294,7 @@ struct wrs_avp_memmap_info {
  * components
  */
 #define WRS_AVP_MAKE_VERSION(_release, _major, _minor) \
-    ((((_release) & 0xffff) << 16) | (((_major) & 0xff) << 8) | ((_minor) & 0xff))
+((((_release) & 0xffff) << 16) | (((_major) & 0xff) << 8) | ((_minor) & 0xff))
 
 
 /**
@@ -305,14 +305,18 @@ struct wrs_avp_memmap_info {
  * an actual change made to the host driver.
  */
 #define WRS_AVP_CURRENT_HOST_VERSION \
-    WRS_AVP_MAKE_VERSION(WRS_AVP_RELEASE_VERSION_1, WRS_AVP_MAJOR_VERSION_0, WRS_AVP_MINOR_VERSION_1)
+WRS_AVP_MAKE_VERSION(WRS_AVP_RELEASE_VERSION_1, \
+		     WRS_AVP_MAJOR_VERSION_0, \
+		     WRS_AVP_MINOR_VERSION_1)
 
 
 /**
  * Represents the current version of the AVP guest drivers
  */
 #define WRS_AVP_CURRENT_GUEST_VERSION \
-    WRS_AVP_MAKE_VERSION(WRS_AVP_RELEASE_VERSION_1, WRS_AVP_MAJOR_VERSION_2, WRS_AVP_MINOR_VERSION_13)
+WRS_AVP_MAKE_VERSION(WRS_AVP_RELEASE_VERSION_1, \
+		     WRS_AVP_MAJOR_VERSION_2, \
+             WRS_AVP_MINOR_VERSION_13)
 
 /**
  * Access AVP device version values
@@ -340,7 +344,7 @@ struct wrs_avp_memmap_info {
  * Defines address translation parameters for each support mbuf pool
  */
 struct wrs_avp_mempool_info {
-	void * addr;
+	void *addr;
 	phys_addr_t phys_addr;
 	uint64_t length;
 };
@@ -350,62 +354,62 @@ struct wrs_avp_mempool_info {
  * via inter-VM shared memory when used in a guest.
  */
 struct wrs_avp_device_info {
-	uint32_t magic; /**< Memory validation marker */
+	uint32_t magic;	/**< Memory validation marker */
 	uint32_t version; /**< Data format version */
 
-	char ifname[WRS_AVP_NAMESIZE];  /**< Network device name for AVP */
+	char ifname[WRS_AVP_NAMESIZE];	/**< Network device name for AVP */
 
 	phys_addr_t tx_phys;
 	phys_addr_t rx_phys;
 	phys_addr_t alloc_phys;
 	phys_addr_t free_phys;
 
-	uint32_t features;            /**< Supported feature bitmap */
-	uint8_t min_rx_queues;        /**< Minimum supported receive/free queues */
-	uint8_t num_rx_queues;        /**< Recommended number of receive/free queues */
-	uint8_t max_rx_queues;        /**< Maximum supported receive/free queues */
-	uint8_t min_tx_queues;        /**< Minimum supported transmit/alloc queues */
-	uint8_t num_tx_queues;        /**< Recommended number of transmit/alloc queues */
-	uint8_t max_tx_queues;        /**< Maximum supported transmit/alloc queues */
+	uint32_t features; /**< Supported feature bitmap */
+	uint8_t min_rx_queues; /**< Minimum supported receive/free queues */
+	uint8_t num_rx_queues; /**< Recommended number of receive/free queues */
+	uint8_t max_rx_queues; /**< Maximum supported receive/free queues */
+	uint8_t min_tx_queues; /**< Minimum supported transmit/alloc queues */
+	uint8_t num_tx_queues; /**< Recommended number of transmit/alloc queues */
+	uint8_t max_tx_queues; /**< Maximum supported transmit/alloc queues */
 
-	uint32_t tx_size;            /**< Size of each transmit queue */
-	uint32_t rx_size;            /**< Size of each receive queue */
-	uint32_t alloc_size;         /**< Size of each alloc queue */
-	uint32_t free_size;          /**< Size of each free queue */
+	uint32_t tx_size; /**< Size of each transmit queue */
+	uint32_t rx_size; /**< Size of each receive queue */
+	uint32_t alloc_size; /**< Size of each alloc queue */
+	uint32_t free_size;	/**< Size of each free queue */
 
 	/* Used by Ethtool */
 	phys_addr_t req_phys;
 	phys_addr_t resp_phys;
 	phys_addr_t sync_phys;
-	void * sync_va;
+	void *sync_va;
 
 	/* mbuf mempool (used when a single memory area is supported) */
-	void * mbuf_va;
+	void *mbuf_va;
 	phys_addr_t mbuf_phys;
 
 	/* mbuf mempools */
 	struct wrs_avp_mempool_info pool[WRS_AVP_MAX_MEMPOOLS];
 
 #ifdef __KERNEL__
-    /* Ethernet info */
-    char ethaddr[ETH_ALEN];
+	/* Ethernet info */
+	char ethaddr[ETH_ALEN];
 #else
-    char ethaddr[ETHER_ADDR_LEN];
+	char ethaddr[ETHER_ADDR_LEN];
 #endif
 
-	uint8_t mode;                /**< device mode, i.e guest, host, trace */
+	uint8_t mode; /**< device mode, i.e guest, host, trace */
 
 	/* mbuf size */
 	unsigned mbuf_size;
 
-    /*
-     * unique id to differentiate between two instantiations of the same AVP
-     * device (i.e., the guest needs to know if the device has been deleted
-     * and recreated).
-     */
-    uint64_t device_id;
+	/*
+	 * unique id to differentiate between two instantiations of the same AVP
+	 * device (i.e., the guest needs to know if the device has been deleted
+	 * and recreated).
+	 */
+	uint64_t device_id;
 
-    uint32_t max_rx_pkt_len;      /**< Maximum receive unit size */
+	uint32_t max_rx_pkt_len; /**< Maximum receive unit size */
 };
 
 #define WRS_AVP_MAX_QUEUES (8) /**< Maximum number of queues per device */

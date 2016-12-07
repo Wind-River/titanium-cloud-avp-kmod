@@ -41,12 +41,6 @@
 #include "avp_dev.h"
 #include "avp_ctrl.h"
 
-/* Utility functions from avp_misc.c */
-extern int avp_dev_create(struct wrs_avp_device_info *dev_info,
-						  struct device *parent,
-						  struct avp_dev **avpptr);
-extern int avp_dev_detach(struct avp_dev *avp);
-extern int avp_dev_release(uint64_t device_id);
 
 /* Defines the default number of characters allowed in an MSI-X vector name */
 #define WRS_AVP_PCI_MSIX_NAME_LEN 64
@@ -69,17 +63,17 @@ struct wrs_avp_pci_dev {
 	struct workqueue_struct *workqueue;
 };
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3,8,0)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 8, 0)
 #define PCI_DEVICE_SUB(vend, dev, subvend, subdev) \
 	.vendor = (vend), .device = (dev), \
 	.subvendor = (subvend), .subdevice = (subdev)
 #endif
 
-static DEFINE_PCI_DEVICE_TABLE(avp_pci_ids) = {
+const struct pci_device_id avp_pci_ids[] = {
 	{ PCI_DEVICE_SUB(WRS_AVP_PCI_VENDOR_ID,
-	 WRS_AVP_PCI_DEVICE_ID,
-	 WRS_AVP_PCI_SUB_VENDOR_ID,
-	                 WRS_AVP_PCI_SUB_DEVICE_ID) },
+			 WRS_AVP_PCI_DEVICE_ID,
+			 WRS_AVP_PCI_SUB_VENDOR_ID,
+			 WRS_AVP_PCI_SUB_DEVICE_ID) },
 	{ 0 }
 };
 MODULE_DEVICE_TABLE(pci, avp_pci_ids);
@@ -87,7 +81,7 @@ MODULE_DEVICE_TABLE(pci, avp_pci_ids);
 /* map memory regions in to kernel virtual address space */
 static int
 avp_pci_map_regions(struct pci_dev *dev,
-					struct wrs_avp_pci_dev *avp_dev)
+		    struct wrs_avp_pci_dev *avp_dev)
 {
 	unsigned long addr, length, flags;
 	phys_addr_t phys_addr;
@@ -98,9 +92,8 @@ avp_pci_map_regions(struct pci_dev *dev,
 		length = pci_resource_len(dev, i);
 		addr = pci_resource_start(dev, i);
 
-		if ((length == 0) && (addr == 0)) {
+		if ((length == 0) && (addr == 0))
 			continue;
-		}
 
 		if ((length == 0) || (addr == 0)) {
 			AVP_ERR("BAR%u has invalid length %lu and address %lu\n",
@@ -112,9 +105,9 @@ avp_pci_map_regions(struct pci_dev *dev,
 		if (flags & IORESOURCE_MEM) {
 			/* map addresses into kernel address space */
 			ptr = ioremap(addr, length);
-			if (ptr == NULL) {
+			if (ptr == NULL)
 				return -1;
-			}
+
 			avp_dev->addresses[i] = ptr;
 			AVP_DBG("BAR%u 0x%016llx ioremap to 0x%p", i,
 					(unsigned long long)addr, ptr);
@@ -133,21 +126,21 @@ avp_pci_map_regions(struct pci_dev *dev,
 static int
 avp_pci_device_version_check(uint32_t version)
 {
-    uint32_t driver = WRS_AVP_STRIP_MINOR_VERSION(WRS_AVP_KERNEL_DRIVER_VERSION);
-    uint32_t device = WRS_AVP_STRIP_MINOR_VERSION(version);
+	uint32_t driver = WRS_AVP_STRIP_MINOR_VERSION(WRS_AVP_KERNEL_DRIVER_VERSION);
+	uint32_t device = WRS_AVP_STRIP_MINOR_VERSION(version);
 
-    if (device <= driver) {
-        /* the incoming device version is less than or equal to our own */
-        return 0;
-    }
+	if (device <= driver) {
+		/* the incoming device version is less than or equal to our own */
+		return 0;
+	}
 
-    return 1;
+	return 1;
 }
 
 /* verify that memory regions have expected version and validation markers */
 static int
 avp_pci_check_regions(struct pci_dev *dev,
-					  struct wrs_avp_pci_dev *avp_dev)
+		      struct wrs_avp_pci_dev *avp_dev)
 {
 	struct wrs_avp_memmap_info *memmap;
 	struct wrs_avp_device_info *info;
@@ -158,47 +151,47 @@ avp_pci_check_regions(struct pci_dev *dev,
 		ptr = avp_dev->addresses[i];
 
 		switch (i) {
-			case WRS_AVP_PCI_MEMMAP_BAR:
-				if (ptr == NULL) {
-					AVP_ERR("Missing address space for BAR%u\n", i);
-					return -EINVAL;
-				}
-				memmap = (struct wrs_avp_memmap_info*)ptr;
-				if ((memmap->magic != WRS_AVP_MEMMAP_MAGIC) ||
-					(memmap->version != WRS_AVP_MEMMAP_VERSION)) {
-					AVP_ERR("Invalid memmap magic 0x%08x and version %u\n",
-							memmap->magic, memmap->version);
-					return -EINVAL;
-				}
-				break;
+		case WRS_AVP_PCI_MEMMAP_BAR:
+			if (ptr == NULL) {
+				AVP_ERR("Missing address space for BAR%u\n", i);
+				return -EINVAL;
+			}
+			memmap = (struct wrs_avp_memmap_info *)ptr;
+			if ((memmap->magic != WRS_AVP_MEMMAP_MAGIC) ||
+			    (memmap->version != WRS_AVP_MEMMAP_VERSION)) {
+				AVP_ERR("Invalid memmap magic 0x%08x and version %u\n",
+					memmap->magic, memmap->version);
+				return -EINVAL;
+			}
+			break;
 
-			case WRS_AVP_PCI_DEVICE_BAR:
-				if (ptr == NULL) {
-					AVP_ERR("Missing address space for BAR%u\n", i);
-					return -EINVAL;
-				}
-				info = (struct wrs_avp_device_info*)ptr;
-				if ((info->magic != WRS_AVP_DEVICE_MAGIC) ||
-					avp_pci_device_version_check(info->version)) {
-					AVP_ERR("Invalid device info magic 0x%08x or version 0x%08x > 0x%08x\n",
-							info->magic, info->version,
-                            WRS_AVP_KERNEL_DRIVER_VERSION);
-					return -EINVAL;
-				}
-				break;
+		case WRS_AVP_PCI_DEVICE_BAR:
+			if (ptr == NULL) {
+				AVP_ERR("Missing address space for BAR%u\n", i);
+				return -EINVAL;
+			}
+			info = (struct wrs_avp_device_info *)ptr;
+			if ((info->magic != WRS_AVP_DEVICE_MAGIC) ||
+			    avp_pci_device_version_check(info->version)) {
+				AVP_ERR("Invalid device info magic 0x%08x or version 0x%08x > 0x%08x\n",
+					info->magic, info->version,
+					WRS_AVP_KERNEL_DRIVER_VERSION);
+				return -EINVAL;
+			}
+			break;
 
-			case WRS_AVP_PCI_MEMORY_BAR:
-			case WRS_AVP_PCI_MMIO_BAR:
-				if (ptr == NULL) {
-					AVP_ERR("Missing address space for BAR%u\n", i);
-					return -EINVAL;
-				}
-				break;
+		case WRS_AVP_PCI_MEMORY_BAR:
+		case WRS_AVP_PCI_MMIO_BAR:
+			if (ptr == NULL) {
+				AVP_ERR("Missing address space for BAR%u\n", i);
+				return -EINVAL;
+			}
+			break;
 
-			case WRS_AVP_PCI_MSIX_BAR:
-			default:
-				/* no validation required */
-				break;
+		case WRS_AVP_PCI_MSIX_BAR:
+		default:
+			/* no validation required */
+			break;
 		}
 	}
 
@@ -208,7 +201,7 @@ avp_pci_check_regions(struct pci_dev *dev,
 /* release kernel virtual address mapping */
 static void
 avp_pci_unmap_regions(struct pci_dev *dev,
-					  struct wrs_avp_pci_dev *avp_dev)
+		      struct wrs_avp_pci_dev *avp_dev)
 {
 	unsigned i;
 
@@ -228,7 +221,7 @@ avp_pci_unmap_regions(struct pci_dev *dev,
 /* translate from host physical address to guest physical address */
 static phys_addr_t
 avp_pci_translate_address(struct wrs_avp_pci_dev *avp_dev,
-						  phys_addr_t host_phys_addr)
+			  phys_addr_t host_phys_addr)
 {
 	struct wrs_avp_memmap_info *info;
 	struct wrs_avp_memmap *map;
@@ -237,7 +230,7 @@ avp_pci_translate_address(struct wrs_avp_pci_dev *avp_dev,
 	unsigned i;
 
 	phys_addr = virt_to_phys(avp_dev->addresses[WRS_AVP_PCI_MEMORY_BAR]);
-	info = (struct wrs_avp_memmap_info*)
+	info = (struct wrs_avp_memmap_info *)
 		avp_dev->addresses[WRS_AVP_PCI_MEMMAP_BAR];
 
 	offset = 0;
@@ -268,14 +261,14 @@ avp_pci_translate_address(struct wrs_avp_pci_dev *avp_dev,
  */
 static int
 avp_pci_create(struct pci_dev *dev,
-			   struct wrs_avp_pci_dev *avp_dev)
+	       struct wrs_avp_pci_dev *avp_dev)
 {
 	struct wrs_avp_device_info *dev_info = &avp_dev->info;
 	struct wrs_avp_device_config dev_config;
 	struct wrs_avp_device_info *info;
 	struct net_device *netdev;
 	unsigned long addr;
-    unsigned i;
+	unsigned i;
 	int ret;
 
 	addr = pci_resource_start(dev, WRS_AVP_PCI_DEVICE_BAR);
@@ -283,7 +276,7 @@ avp_pci_create(struct pci_dev *dev,
 		AVP_ERR("BAR%u is not mapped\n", WRS_AVP_PCI_DEVICE_BAR);
 		return -EFAULT;
 	}
-	info = (struct wrs_avp_device_info*)
+	info = (struct wrs_avp_device_info *)
 		avp_dev->addresses[WRS_AVP_PCI_DEVICE_BAR];
 
 	/* translate incoming host dev_info to guest address space */
@@ -306,9 +299,8 @@ avp_pci_create(struct pci_dev *dev,
 
 	/* create the actual device using the translated addresses */
 	ret = avp_dev_create(dev_info, &dev->dev, &avp_dev->avp);
-	if (ret < 0) {
+	if (ret < 0)
 		return ret;
-	}
 
 	netdev = avp_dev->avp->net_dev;
 
@@ -316,11 +308,11 @@ avp_pci_create(struct pci_dev *dev,
 	memset(&dev_config, 0, sizeof(dev_config));
 	dev_config.device_id = info->device_id;
 	dev_config.driver_type = WRS_AVP_DRIVER_TYPE_KERNEL;
-    dev_config.driver_version = WRS_AVP_KERNEL_DRIVER_VERSION;
-    dev_config.features = avp_dev->avp->features;
+	dev_config.driver_version = WRS_AVP_KERNEL_DRIVER_VERSION;
+	dev_config.features = avp_dev->avp->features;
 	dev_config.num_tx_queues = avp_dev->avp->num_tx_queues;
 	dev_config.num_rx_queues = avp_dev->avp->num_rx_queues;
-    dev_config.if_up = !!(netdev->flags & IFF_UP);
+	dev_config.if_up = !!(netdev->flags & IFF_UP);
 
 	/* inform the device of negotiated values */
 	ret = avp_ctrl_set_config(avp_dev->avp, &dev_config);
@@ -408,14 +400,14 @@ avp_pci_interrupt_actions(struct wrs_avp_pci_dev *avp_pci_dev, int irq)
 		 */
 		value = ioread32(registers + WRS_AVP_MIGRATION_STATUS_OFFSET);
 		switch (value) {
-			case WRS_AVP_MIGRATION_DETACHED:
-				queue_work(avp_pci_dev->workqueue, &avp_pci_dev->detach);
-				break;
-			case WRS_AVP_MIGRATION_ATTACHED:
-				queue_work(avp_pci_dev->workqueue, &avp_pci_dev->attach);
-				break;
-			default:
-				AVP_ERR("unexpected migration status, status=%u\n", value);
+		case WRS_AVP_MIGRATION_DETACHED:
+			queue_work(avp_pci_dev->workqueue, &avp_pci_dev->detach);
+			break;
+		case WRS_AVP_MIGRATION_ATTACHED:
+			queue_work(avp_pci_dev->workqueue, &avp_pci_dev->attach);
+			break;
+		default:
+			AVP_ERR("unexpected migration status, status=%u\n", value);
 		}
 	} else {
 		AVP_ERR("unexpected interrupt received, status=0x%08x\n", value);
@@ -439,9 +431,8 @@ avp_pci_interrupt_handler(int irq, void *data)
 	uint32_t value;
 	uint16_t status;
 
-	if (avp_pci_dev == NULL) {
+	if (avp_pci_dev == NULL)
 		return IRQ_NONE;
-	}
 
 	spin_lock_irqsave(&avp_pci_dev->lock, flags);
 
@@ -470,7 +461,7 @@ unlock:
 
 static int
 avp_pci_setup_msi_interrupts(struct pci_dev *dev,
-							 struct wrs_avp_pci_dev *avp_pci_dev)
+			     struct wrs_avp_pci_dev *avp_pci_dev)
 {
 	struct msix_entry *entry;
 	size_t size;
@@ -513,8 +504,7 @@ retry:
 	if ((ret < 0) || (ret == avp_pci_dev->msix_vectors)) {
 		AVP_ERR("Failed to enable MSI-X interrupts, ret=%d\n", ret);
 		goto cleanup;
-	}
-	else if (ret > 0) {
+	} else if (ret > 0) {
 		/* The device has a smaller number of vectors available */
 		AVP_INFO("Reducing MSI-X vectors to %d to match device limits\n", ret);
 		avp_pci_dev->msix_vectors = ret;
@@ -548,15 +538,15 @@ retry:
 
 cleanup:
 	avp_pci_dev->msix_vectors = 0;
-	if (avp_pci_dev->msix_names) kfree(avp_pci_dev->msix_names);
-	if (avp_pci_dev->msix_entries) kfree(avp_pci_dev->msix_entries);
+	kfree(avp_pci_dev->msix_names);
+	kfree(avp_pci_dev->msix_entries);
 	pci_disable_msix(dev);
 	return ret;
 }
 
 static int
 avp_pci_setup_irq_interrupts(struct pci_dev *dev,
-							 struct wrs_avp_pci_dev *avp_pci_dev)
+			     struct wrs_avp_pci_dev *avp_pci_dev)
 {
 	char name[WRS_AVP_PCI_MSIX_NAME_LEN];
 	int ret;
@@ -579,7 +569,7 @@ avp_pci_setup_irq_interrupts(struct pci_dev *dev,
 
 static int
 avp_pci_setup_interrupts(struct pci_dev *dev,
-						 struct wrs_avp_pci_dev *avp_pci_dev)
+			 struct wrs_avp_pci_dev *avp_pci_dev)
 {
 	void *registers = avp_pci_dev->addresses[WRS_AVP_PCI_MMIO_BAR];
 	int ret;
@@ -588,8 +578,7 @@ avp_pci_setup_interrupts(struct pci_dev *dev,
 	if (ret) {
 		/* enable MSI-X as preferred interrupt mode */
 		ret = avp_pci_setup_msi_interrupts(dev, avp_pci_dev);
-	}
-	else {
+	} else {
 		/* fall back to IRQ based interrupts */
 		AVP_INFO("MSI-X not supported; using IRQ based interrupts\n");
 		ret = avp_pci_setup_irq_interrupts(dev, avp_pci_dev);
@@ -606,7 +595,7 @@ avp_pci_setup_interrupts(struct pci_dev *dev,
 
 static int
 avp_pci_release_interrupts(struct pci_dev *dev,
-						   struct wrs_avp_pci_dev *avp_pci_dev)
+			   struct wrs_avp_pci_dev *avp_pci_dev)
 {
 	void *registers = avp_pci_dev->addresses[WRS_AVP_PCI_MMIO_BAR];
 	struct msix_entry *entry;
@@ -660,16 +649,12 @@ avp_pci_migration_pending(struct wrs_avp_pci_dev *avp_pci_dev)
 
 static int
 avp_pci_release(struct pci_dev *dev,
-				struct wrs_avp_pci_dev *avp_dev)
+		struct wrs_avp_pci_dev *avp_dev)
 {
 	return avp_dev_release(avp_dev->info.device_id);
 }
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3,8,0)
-static int __devinit
-#else
 static int
-#endif
 avp_pci_probe(struct pci_dev *dev, const struct pci_device_id *id)
 {
 	struct wrs_avp_pci_dev *avp_dev;
@@ -805,8 +790,8 @@ avp_pci_remove(struct pci_dev *dev)
 static void
 avp_pci_shutdown(struct pci_dev *dev)
 {
-    /* shutdown the device on reboot or shutdown */
-    avp_pci_remove(dev);
+	/* shutdown the device on reboot or shutdown */
+	avp_pci_remove(dev);
 }
 
 static struct pci_driver avp_pci_driver = {
