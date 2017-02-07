@@ -129,9 +129,9 @@ avp_net_copy_from_mbufs(struct avp_dev *avp,
 
 	if (pkt_kva->ol_flags & WRS_AVP_RX_VLAN_PKT) {
 #if ( LINUX_VERSION_CODE < KERNEL_VERSION(3,10,0) )
-		__vlan_hwaccel_put_tag(skb, pkt_kva->vlan_macip.f.vlan_tci);
+		__vlan_hwaccel_put_tag(skb, pkt_kva->vlan_tci);
 #else
-		__vlan_hwaccel_put_tag(skb, ntohs(ETH_P_8021Q), pkt_kva->vlan_macip.f.vlan_tci);
+		__vlan_hwaccel_put_tag(skb, ntohs(ETH_P_8021Q), pkt_kva->vlan_tci);
 #endif
 	}
 
@@ -322,10 +322,10 @@ avp_net_copy_to_mbufs(struct avp_dev *avp,
 
 	if (vlan_tx_tag_present(skb)) {
 		first_kva->ol_flags |= WRS_AVP_TX_VLAN_PKT;
-		first_kva->vlan_macip.f.vlan_tci = vlan_tx_tag_get(skb);
+		first_kva->vlan_tci = vlan_tx_tag_get(skb);
 	} else {
 		first_kva->ol_flags = 0;
-		first_kva->vlan_macip.data = 0;
+		first_kva->vlan_tci = 0;
 	}
 
 	return 0;

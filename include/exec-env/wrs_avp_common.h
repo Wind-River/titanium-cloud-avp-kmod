@@ -112,7 +112,7 @@ struct wrs_avp_device_config {
 	uint16_t num_tx_queues; /**< Number of active transmit queues */
 	uint16_t num_rx_queues; /**< Number of active receive queues */
     uint8_t if_up; /**< 1: interface up, 0: interface down */
-} __attribute__((packed));
+} __attribute__((__packed__));
 
 /*
  * Structure for AVP request.
@@ -128,8 +128,8 @@ struct wrs_avp_request {
 } __attribute__((__packed__));
 
 /*
- * Fifo struct mapped in a shared memory. It describes a circular buffer FIFO
- * Write and read should wrap arround. Fifo is empty when write == read
+ * FIFO struct mapped in a shared memory. It describes a circular buffer FIFO
+ * Write and read should wrap around. FIFO is empty when write == read
  * Writing should never overwrite the read position
  */
 struct wrs_avp_fifo {
@@ -141,33 +141,24 @@ struct wrs_avp_fifo {
 };
 
 
-/** The kernel image of the rte_vlan_macip offload features structure. */
-union wrs_vlan_macip {
-	uint32_t data;
-	struct {
-		uint16_t l3_len:9; /**< L3 (IP) Header Length. */
-		uint16_t l2_len:7; /**< L2 (MAC) Header Length. */
-		uint16_t vlan_tci; /**< VLAN Tag Control Identifier (CPU order). */
-	} f;
-};
-
 /*
- * The kernel image of the rte_mbuf struct, with only the relevant fields.
- * Padding is necessary to assure the offsets of these fields
+ * AVP packet buffer header used to define the exchange of packet data.
  */
 struct wrs_avp_mbuf {
 	uint64_t pad0;
-	void *buf_addr;
-	char pad1[14];
+	void *pkt_mbuf;         /**< Reference to packet mbuf */
+	uint8_t pad1[14];
 	uint16_t ol_flags;      /**< Offload features. */
-	void *next;
+	void *next;             /**< Reference to next buffer in chain */
 	void *data;             /**< Start address of data in segment buffer. */
 	uint16_t data_len;      /**< Amount of data in segment buffer. */
     uint8_t nb_segs;        /**< Number of segments */
-	char pad2;
+	uint8_t pad2;
 	uint16_t pkt_len;       /**< Total pkt len: sum of all segment data_len. */
-    union wrs_vlan_macip vlan_macip; /**< Offload data */
-} __attribute__((__aligned__(64)));
+    uint32_t pad3;
+    uint16_t vlan_tci;      /**< VLAN Tag Control Identifier (CPU order). */
+    uint32_t pad4;
+} __attribute__((__aligned__(64), __packed__));
 
 
 /**{ AVP device features */
