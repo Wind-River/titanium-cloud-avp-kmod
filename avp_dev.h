@@ -38,7 +38,7 @@
 #include <linux/cpumask.h>
 #include <linux/if_ether.h>
 
-#include <exec-env/wrs_avp_common.h>
+#include <rte_avp_common.h>
 
 
 /* Defines the number receive thread CPU yield time in usecs */

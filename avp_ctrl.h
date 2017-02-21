@@ -26,7 +26,7 @@
 #define _AVP_CTRL_H_
 
 #include <avp_dev.h>
-#include <exec-env/wrs_avp_common.h>
+#include <rte_avp_common.h>
 
 int avp_ctrl_set_link_state(struct avp_dev *avp, unsigned state);
 

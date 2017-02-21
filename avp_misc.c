@@ -48,8 +48,8 @@
 #include <linux/sched.h>
 #include <linux/version.h>
 
-#include <exec-env/wrs_avp_common.h>
-#include <exec-env/wrs_avp_fifo.h>
+#include <rte_avp_common.h>
+#include <rte_avp_fifo.h>
 #include "avp_dev.h"
 #include "avp_ctrl.h"
 
