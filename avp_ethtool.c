@@ -42,9 +42,9 @@ avp_get_drvinfo(struct net_device *netdev,
 	char driver_version[32];
 
 	snprintf(driver_version, sizeof(driver_version), "%u.%u.%u",
-		WRS_AVP_GET_RELEASE_VERSION(version),
-		WRS_AVP_GET_MAJOR_VERSION(version),
-		WRS_AVP_GET_MINOR_VERSION(version));
+		RTE_AVP_GET_RELEASE_VERSION(version),
+		RTE_AVP_GET_MAJOR_VERSION(version),
+		RTE_AVP_GET_MINOR_VERSION(version));
 
 	strlcpy(drvinfo->driver, WRS_AVP_DRIVER_NAME, sizeof(drvinfo->driver));
 	strlcpy(drvinfo->version, driver_version, sizeof(drvinfo->version));

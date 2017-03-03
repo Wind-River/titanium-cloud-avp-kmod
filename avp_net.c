@@ -40,10 +40,10 @@
 #include <linux/if_vlan.h>
 #include <net/arp.h>
 
-#include <rte_avp_common.h>
-#include <rte_avp_fifo.h>
 #include "avp_dev.h"
 #include "avp_ctrl.h"
+
+#include <rte_avp_fifo.h>
 
 /* Defines number of jiffies used to configure the skbuff watchdog */
 #define WRS_AVP_WD_TIMEOUT 5
@@ -95,7 +95,7 @@ avp_net_translate_buffer(struct avp_dev *avp, void *addr)
 	struct avp_mempool_info *pool;
 	unsigned i;
 
-	for (i = 0; i < WRS_AVP_MAX_MEMPOOLS; i++) {
+	for (i = 0; i < RTE_AVP_MAX_MEMPOOLS; i++) {
 		pool = &avp->pool[i];
 		if ((pool != NULL) && (addr >= pool->va) && (addr < (pool->va + pool->length)))
 			return addr - pool->va + pool->kva;
@@ -112,10 +112,10 @@ avp_net_translate_buffer(struct avp_dev *avp, void *addr)
  */
 static inline int
 avp_net_copy_from_mbufs(struct avp_dev *avp,
-			struct wrs_avp_mbuf *pkt_kva,
+			struct rte_avp_desc *pkt_kva,
 			struct sk_buff *skb)
 {
-	struct wrs_avp_mbuf *next_va;
+	struct rte_avp_desc *next_va;
 	size_t offset = 0;
 	void *data_kva;
 	int ret;
@@ -123,7 +123,7 @@ avp_net_copy_from_mbufs(struct avp_dev *avp,
 	/* setup the SKB to the proper length */
 	skb_put(skb, pkt_kva->pkt_len);
 
-	if (pkt_kva->ol_flags & WRS_AVP_RX_VLAN_PKT) {
+	if (pkt_kva->ol_flags & RTE_AVP_RX_VLAN_PKT) {
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 10, 0))
 		__vlan_hwaccel_put_tag(skb, pkt_kva->vlan_tci);
 #else
@@ -158,14 +158,14 @@ avp_net_rx(struct avp_dev *avp, unsigned qnum)
 {
 	unsigned ret;
 	unsigned i, num, num_rq, num_fq;
-	struct wrs_avp_mbuf *avp_bufs[WRS_AVP_MBUF_BURST_SZ];
-	struct wrs_avp_mbuf *pkt_buf;
+	struct rte_avp_desc *avp_bufs[WRS_AVP_MBUF_BURST_SZ];
+	struct rte_avp_desc *pkt_buf;
 	uint32_t pkt_len;
 	struct sk_buff *skb;
 	struct net_device *dev = avp->net_dev;
 	struct avp_stats *stats = this_cpu_ptr(avp->stats);
-	struct wrs_avp_fifo *rx_q = avp->rx_q[qnum];
-	struct wrs_avp_fifo *free_q = avp->free_q[qnum];
+	struct rte_avp_fifo *rx_q = avp->rx_q[qnum];
+	struct rte_avp_fifo *free_q = avp->free_q[qnum];
 
 	/* Get the number of entries in rx_q */
 	num_rq = avp_fifo_count(rx_q);
@@ -257,14 +257,14 @@ avp_net_rx(struct avp_dev *avp, unsigned qnum)
 static inline int
 avp_net_copy_to_mbufs(struct avp_dev *avp,
 		      struct sk_buff *skb,
-		      struct wrs_avp_mbuf **mbufs,
+		      struct rte_avp_desc **mbufs,
 		      unsigned count)
 {
-	struct wrs_avp_mbuf *previous_kva = NULL;
-	struct wrs_avp_mbuf *first_kva = NULL;
-	struct wrs_avp_mbuf *pkt_kva;
+	struct rte_avp_desc *previous_kva = NULL;
+	struct rte_avp_desc *first_kva = NULL;
+	struct rte_avp_desc *pkt_kva;
 	void *first_data_kva = NULL;
-	struct wrs_avp_mbuf *buf;
+	struct rte_avp_desc *buf;
 	unsigned copy_length;
 	unsigned offset = 0;
 	void *data_kva;
@@ -312,7 +312,7 @@ avp_net_copy_to_mbufs(struct avp_dev *avp,
 #else
 	if (vlan_tx_tag_present(skb)) {
 #endif
-		first_kva->ol_flags |= WRS_AVP_TX_VLAN_PKT;
+		first_kva->ol_flags |= RTE_AVP_TX_VLAN_PKT;
 #ifdef skb_vlan_tag_get
 		first_kva->vlan_tci = skb_vlan_tag_get(skb);
 #else
@@ -333,11 +333,11 @@ avp_net_tx(struct sk_buff *skb, struct net_device *dev)
 	unsigned i, num, num_aq;
 	struct avp_dev *avp = netdev_priv(dev);
 	struct avp_stats *stats = this_cpu_ptr(avp->stats);
-	struct avp_mbuf_cache *mbuf_cache;
-	struct wrs_avp_mbuf *pkt_kva = NULL;
-	struct wrs_avp_mbuf *pkt_va = NULL;
-	struct wrs_avp_fifo *tx_q;
-	struct wrs_avp_fifo *alloc_q;
+	struct avp_desc_cache *mbuf_cache;
+	struct rte_avp_desc *pkt_kva = NULL;
+	struct rte_avp_desc *pkt_va = NULL;
+	struct rte_avp_fifo *tx_q;
+	struct rte_avp_fifo *alloc_q;
 	unsigned count;
 	unsigned qnum;
 
@@ -352,7 +352,7 @@ avp_net_tx(struct sk_buff *skb, struct net_device *dev)
 	if (unlikely(count == 0)) {
 		AVP_ERR_RATELIMIT("dropping zero length packet on %s\n", dev->name);
 		goto drop;
-	} else if (unlikely(count > WRS_AVP_MAX_MBUF_SEGMENTS)) {
+	} else if (unlikely(count > RTE_AVP_MAX_MBUF_SEGMENTS)) {
 		AVP_ERR_RATELIMIT("dropping oversized packet on %s\n", dev->name);
 		goto drop;
 	}
@@ -380,7 +380,7 @@ avp_net_tx(struct sk_buff *skb, struct net_device *dev)
 		}
 
 		/* cap the number of buffers to be queried to the max cache size */
-		num = min(num_aq, (unsigned)WRS_AVP_QUEUE_MBUF_CACHE_SIZE - mbuf_cache->count);
+		num = min(num_aq, (unsigned)WRS_AVP_QUEUE_DESC_CACHE_SIZE - mbuf_cache->count);
 
 		/* dequeue a mbufs from alloc_q */
 		ret = avp_fifo_get(alloc_q, (void **)&mbuf_cache->mbufs[mbuf_cache->count], num);

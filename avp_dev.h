@@ -38,6 +38,8 @@
 #include <linux/cpumask.h>
 #include <linux/if_ether.h>
 
+#include "avp_compat.h"
+
 #include <rte_avp_common.h>
 
 
@@ -48,10 +50,10 @@
 #define WRS_AVP_KTHREAD_MAX_RX_QUEUES (256)
 
 /* Defines the maximum number of data buffers stored in the Tx cache */
-#define WRS_AVP_QUEUE_MBUF_CACHE_SIZE (32)
+#define WRS_AVP_QUEUE_DESC_CACHE_SIZE (32)
 
 /* Defines the current kernel AVP driver version number */
-#define WRS_AVP_KERNEL_DRIVER_VERSION WRS_AVP_CURRENT_GUEST_VERSION
+#define WRS_AVP_KERNEL_DRIVER_VERSION RTE_AVP_CURRENT_GUEST_VERSION
 
 /**
  * A structure to hold the per-cpu statistics for a device.
@@ -82,8 +84,8 @@ struct avp_stats {
 /**
  * A structure to hold per-cpu cache of allocated mbufs
  */
-struct avp_mbuf_cache {
-	struct wrs_avp_mbuf *mbufs[WRS_AVP_QUEUE_MBUF_CACHE_SIZE];
+struct avp_desc_cache {
+	struct rte_avp_desc *mbufs[WRS_AVP_QUEUE_DESC_CACHE_SIZE];
 	unsigned count;
 } ____cacheline_internodealigned_in_smp;
 
@@ -111,7 +113,7 @@ struct avp_dev {
 	struct avp_stats __percpu *stats;
 
 	/* network device name */
-	char ifname[WRS_AVP_NAMESIZE];
+	char ifname[RTE_AVP_NAMESIZE];
 
 	/* unique system identifier */
 	uint64_t device_id;
@@ -137,19 +139,19 @@ struct avp_dev {
 	struct pci_dev *pci_dev;
 
 	/* transmit queues */
-	void *tx_q[WRS_AVP_MAX_QUEUES];
+	void *tx_q[RTE_AVP_MAX_QUEUES];
 
 	/* receive queues */
-	void *rx_q[WRS_AVP_MAX_QUEUES];
+	void *rx_q[RTE_AVP_MAX_QUEUES];
 
 	/* available data buffers */
-	void *alloc_q[WRS_AVP_MAX_QUEUES];
+	void *alloc_q[RTE_AVP_MAX_QUEUES];
 
 	/* used data buffers */
-	void *free_q[WRS_AVP_MAX_QUEUES];
+	void *free_q[RTE_AVP_MAX_QUEUES];
 
 	/* cached data buffers for transmit optimization */
-	struct avp_mbuf_cache mbuf_cache[WRS_AVP_MAX_QUEUES];
+	struct avp_desc_cache mbuf_cache[RTE_AVP_MAX_QUEUES];
 
 	/* request/response queues */
 	void *req_q;
@@ -158,7 +160,7 @@ struct avp_dev {
 	void *sync_va;
 
 	/* per-socket mbuf pools */
-	struct avp_mempool_info pool[WRS_AVP_MAX_MEMPOOLS];
+	struct avp_mempool_info pool[RTE_AVP_MAX_MEMPOOLS];
 
 	/* data buffer address references */
 	void *mbuf_kva;
@@ -210,7 +212,7 @@ extern void avp_net_init(struct net_device *dev);
 extern void avp_trace_init(struct net_device *dev);
 extern void avp_set_ethtool_ops(struct net_device *netdev);
 extern int avp_net_rx(struct avp_dev *avp, unsigned qnum);
-extern int avp_dev_create(struct wrs_avp_device_info *dev_info,
+extern int avp_dev_create(struct rte_avp_device_info *dev_info,
 			  struct device *parent,
 			  struct avp_dev **avpptr);
 extern int avp_dev_detach(struct avp_dev *avp);

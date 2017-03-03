@@ -1,7 +1,8 @@
 /*-
  * GPL LICENSE SUMMARY
  *
- *   Copyright(c) 2013-2014 Wind River Systems, Inc. All rights reserved.
+ *   Copyright(c) 2010-2013 Intel Corporation. All rights reserved.
+ *   Copyright(c) 2013-2014 Wind River Systems. All rights reserved.
  *
  *   This program is free software; you can redistribute it and/or modify
  *   it under the terms of version 2 of the GNU General Public License as
@@ -22,21 +23,13 @@
  *   Wind River Systems, Inc.
  */
 
-#ifndef _AVP_CTRL_H_
-#define _AVP_CTRL_H_
+#ifndef _AVP_COMPAT_H_
+#define _AVP_COMPAT_H_
 
-#include <avp_dev.h>
 
-int avp_ctrl_set_link_state(struct avp_dev *avp, unsigned state);
-
-int avp_ctrl_set_mtu(struct avp_dev *avp, int new_mtu);
-
-int avp_ctrl_set_config(struct avp_dev *avp, struct rte_avp_device_config *config);
-
-int avp_ctrl_shutdown(struct avp_dev *avp);
-
-void avp_ctrl_poll_resp(struct avp_dev *avp);
-
-int avp_ctrl_process_request(struct avp_dev *avp, struct rte_avp_request *req);
-
+#ifndef RTE_CACHE_LINE_SIZE
+/* not available for kernel builds */
+#define RTE_CACHE_LINE_SIZE 64
 #endif
+
+#endif /* _AVP_COMPAT_H_ */

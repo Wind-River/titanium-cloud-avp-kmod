@@ -48,10 +48,10 @@
 #include <linux/sched.h>
 #include <linux/version.h>
 
-#include <rte_avp_common.h>
-#include <rte_avp_fifo.h>
 #include "avp_dev.h"
 #include "avp_ctrl.h"
+
+#include <rte_avp_fifo.h>
 
 MODULE_LICENSE("Dual BSD/GPL");
 MODULE_AUTHOR("Wind River Systems");
@@ -579,8 +579,8 @@ avp_dev_flush_cache(struct avp_dev *dev)
 {
 	unsigned qnum;
 
-	for (qnum = 0; qnum < WRS_AVP_MAX_QUEUES; qnum++) {
-		struct avp_mbuf_cache *cache = &dev->mbuf_cache[qnum];
+	for (qnum = 0; qnum < RTE_AVP_MAX_QUEUES; qnum++) {
+		struct avp_desc_cache *cache = &dev->mbuf_cache[qnum];
 		if (cache->count > 0) {
 			avp_fifo_put(dev->alloc_q[qnum], (void **)cache->mbufs, cache->count);
 			cache->count = 0;
@@ -629,20 +629,20 @@ avp_dev_find(uint64_t device_id)
 }
 
 static int
-avp_dev_validate(struct wrs_avp_device_info *info)
+avp_dev_validate(struct rte_avp_device_info *info)
 {
 	if (!info)
 		return -EINVAL;
 
-	if (info->min_tx_queues > WRS_AVP_MAX_QUEUES) {
+	if (info->min_tx_queues > RTE_AVP_MAX_QUEUES) {
 		AVP_ERR("AVP device id 0x%llx min_tx_queues %u exceeds max %u\n",
-				info->device_id, info->min_tx_queues, WRS_AVP_MAX_QUEUES);
+				info->device_id, info->min_tx_queues, RTE_AVP_MAX_QUEUES);
 		return -EINVAL;
 	}
 
-	if (info->min_rx_queues > WRS_AVP_MAX_QUEUES) {
+	if (info->min_rx_queues > RTE_AVP_MAX_QUEUES) {
 		AVP_ERR("AVP device id 0x%llx min_rx_queues %u exceeds max %u\n",
-				info->device_id, info->min_rx_queues, WRS_AVP_MAX_QUEUES);
+				info->device_id, info->min_rx_queues, RTE_AVP_MAX_QUEUES);
 		return -EINVAL;
 	}
 
@@ -714,16 +714,16 @@ restart:
  * incoming device info.
  */
 int
-avp_dev_configure(struct avp_dev *avp, struct wrs_avp_device_info *dev_info)
+avp_dev_configure(struct avp_dev *avp, struct rte_avp_device_info *dev_info)
 {
 	struct avp_mempool_info *pool;
 	unsigned i;
 
 	/* adjust max values */
 	avp->max_tx_queues =
-		min_t(unsigned, dev_info->max_tx_queues, WRS_AVP_MAX_QUEUES);
+		min_t(unsigned, dev_info->max_tx_queues, RTE_AVP_MAX_QUEUES);
 	avp->max_rx_queues =
-		min_t(unsigned, dev_info->max_rx_queues, WRS_AVP_MAX_QUEUES);
+		min_t(unsigned, dev_info->max_rx_queues, RTE_AVP_MAX_QUEUES);
 
 	/* adjust actual values */
 
@@ -769,7 +769,7 @@ avp_dev_configure(struct avp_dev *avp, struct wrs_avp_device_info *dev_info)
 	avp->sync_va = dev_info->sync_va;
 	avp->sync_kva = phys_to_virt(dev_info->sync_phys);
 
-	for (i = 0; i < WRS_AVP_MAX_MEMPOOLS; i++) {
+	for (i = 0; i < RTE_AVP_MAX_MEMPOOLS; i++) {
 		pool = &avp->pool[i];
 		pool->va = dev_info->pool[i].addr;
 		pool->kva = phys_to_virt(dev_info->pool[i].phys_addr);
@@ -819,7 +819,7 @@ avp_dev_configure(struct avp_dev *avp, struct wrs_avp_device_info *dev_info)
 }
 
 int
-avp_dev_create(struct wrs_avp_device_info *dev_info,
+avp_dev_create(struct rte_avp_device_info *dev_info,
 	       struct device *parent,
 	       struct avp_dev **avpptr)
 {
@@ -847,15 +847,15 @@ avp_dev_create(struct wrs_avp_device_info *dev_info,
 		name = (strlen(dev_info->ifname) ?
 			dev_info->ifname : WRS_AVP_NETDEV_NAME_FORMAT);
 
-		if (dev_info->mode == WRS_AVP_MODE_TRACE) {
+		if (dev_info->mode == RTE_AVP_MODE_TRACE) {
 			net_dev = alloc_netdev_mqs(sizeof(struct avp_dev),
 						   name,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 17, 0))
 						   NET_NAME_UNKNOWN,
 #endif
 						   avp_trace_init,
-						   WRS_AVP_MAX_QUEUES,
-						   WRS_AVP_MAX_QUEUES);
+						   RTE_AVP_MAX_QUEUES,
+						   RTE_AVP_MAX_QUEUES);
 		} else {
 			net_dev = alloc_netdev_mqs(sizeof(struct avp_dev),
 						   name,
@@ -863,8 +863,8 @@ avp_dev_create(struct wrs_avp_device_info *dev_info,
 						   NET_NAME_UNKNOWN,
 #endif
 						   avp_net_init,
-						   WRS_AVP_MAX_QUEUES,
-						   WRS_AVP_MAX_QUEUES);
+						   RTE_AVP_MAX_QUEUES,
+						   RTE_AVP_MAX_QUEUES);
 		}
 
 		if (net_dev == NULL) {
@@ -892,19 +892,19 @@ avp_dev_create(struct wrs_avp_device_info *dev_info,
 		}
 
 		avp->host_features = dev_info->features;
-		if (avp->host_features & WRS_AVP_FEATURE_VLAN_OFFLOAD) {
+		if (avp->host_features & RTE_AVP_FEATURE_VLAN_OFFLOAD) {
 			/*
 			 * We always enable VLAN offload during initial device setup.  In
 			 * the future we may choose to support ethtool operations to
 			 * enable/disable these features at runtime.
 			 */
-			avp->features |= WRS_AVP_FEATURE_VLAN_OFFLOAD;
+			avp->features |= RTE_AVP_FEATURE_VLAN_OFFLOAD;
 			net_dev->features = NETIF_F_HW_VLAN_TX | NETIF_F_HW_VLAN_RX;
 			net_dev->hw_features = net_dev->features;
 		}
 
 		avp->mode = dev_info->mode;
-		if (avp->mode != WRS_AVP_MODE_TRACE) {
+		if (avp->mode != RTE_AVP_MODE_TRACE) {
 			memcpy(net_dev->dev_addr, dev_info->ethaddr, ETH_ALEN);
 			if (!is_valid_ether_addr(net_dev->dev_addr)) {
 				AVP_ERR("error validating MAC address: %pM\n", &net_dev->dev_addr);
@@ -919,9 +919,9 @@ avp_dev_create(struct wrs_avp_device_info *dev_info,
 		reused = 1;
 		AVP_INFO("attaching netdev %s to new v%u.%u.%u device 0x%llx\n",
 			 net_dev->name,
-			 WRS_AVP_GET_RELEASE_VERSION(dev_info->version),
-			 WRS_AVP_GET_MAJOR_VERSION(dev_info->version),
-			 WRS_AVP_GET_MINOR_VERSION(dev_info->version),
+			 RTE_AVP_GET_RELEASE_VERSION(dev_info->version),
+			 RTE_AVP_GET_MAJOR_VERSION(dev_info->version),
+			 RTE_AVP_GET_MINOR_VERSION(dev_info->version),
 			 dev_info->device_id);
 
 		if ((dev_info->features & avp->features) != avp->features) {
@@ -953,9 +953,9 @@ avp_dev_create(struct wrs_avp_device_info *dev_info,
 
 		AVP_INFO("registered netdev %s for v%u.%u.%u device 0x%llx\n",
 				 net_dev->name,
-			 WRS_AVP_GET_RELEASE_VERSION(dev_info->version),
-			 WRS_AVP_GET_MAJOR_VERSION(dev_info->version),
-			 WRS_AVP_GET_MINOR_VERSION(dev_info->version),
+			 RTE_AVP_GET_RELEASE_VERSION(dev_info->version),
+			 RTE_AVP_GET_MAJOR_VERSION(dev_info->version),
+			 RTE_AVP_GET_MINOR_VERSION(dev_info->version),
 			 dev_info->device_id);
 
 		/* add to device list (only once) */
@@ -974,7 +974,7 @@ avp_dev_create(struct wrs_avp_device_info *dev_info,
 	list_add(&avp->poll, &avp_poll_head);
 	up_write(&avp_poll_lock);
 
-	if (avp->mode == WRS_AVP_MODE_TRACE) {
+	if (avp->mode == RTE_AVP_MODE_TRACE) {
 		/* assign device to thread for trace processing */
 		avp_trace_dev_add(avp);
 	} else {
@@ -1000,7 +1000,7 @@ _avp_dev_release(struct avp_dev *dev)
 	/* Inform the host that we are shutting down. */
 	avp_ctrl_shutdown(dev);
 
-	if (dev->mode == WRS_AVP_MODE_TRACE) {
+	if (dev->mode == RTE_AVP_MODE_TRACE) {
 		/* unassign from receive threads */
 		avp_trace_dev_remove(dev);
 	} else {
@@ -1048,7 +1048,7 @@ avp_dev_release(uint64_t device_id)
 static int
 avp_ioctl_create(unsigned int ioctl_num, unsigned long ioctl_param)
 {
-	struct wrs_avp_device_info dev_info;
+	struct rte_avp_device_info dev_info;
 	int ret;
 
 	/* Check the buffer size, to avoid warning */
@@ -1069,7 +1069,7 @@ avp_ioctl_create(unsigned int ioctl_num, unsigned long ioctl_param)
 static int
 avp_ioctl_release(unsigned int ioctl_num, unsigned long ioctl_param)
 {
-	struct wrs_avp_device_info dev_info;
+	struct rte_avp_device_info dev_info;
 	struct avp_dev *dev;
 	int ret = -EINVAL;
 
@@ -1099,7 +1099,7 @@ avp_ioctl_release(unsigned int ioctl_num, unsigned long ioctl_param)
 static int
 avp_ioctl_query(unsigned int ioctl_num, unsigned long ioctl_param)
 {
-	struct wrs_avp_device_config dev_config;
+	struct rte_avp_device_config dev_config;
 	struct avp_dev *dev;
 	int ret = -EINVAL;
 
@@ -1123,7 +1123,7 @@ avp_ioctl_query(unsigned int ioctl_num, unsigned long ioctl_param)
 	/* update device info */
 	memset(&dev_config, 0, sizeof(dev_config));
 	dev_config.device_id = dev->device_id;
-	dev_config.driver_type = WRS_AVP_DRIVER_TYPE_KERNEL;
+	dev_config.driver_type = RTE_AVP_DRIVER_TYPE_KERNEL;
 	dev_config.driver_version = WRS_AVP_KERNEL_DRIVER_VERSION;
 	dev_config.features = dev->features;
 	dev_config.num_tx_queues = dev->num_tx_queues;
@@ -1150,13 +1150,13 @@ avp_ioctl(struct inode *inode,
 	AVP_DBG("IOCTL num=0x%0x param=0x%0lx\n", ioctl_num, ioctl_param);
 
 	switch (_IOC_NR(ioctl_num)) {
-	case _IOC_NR(WRS_AVP_IOCTL_CREATE):
+	case _IOC_NR(RTE_AVP_IOCTL_CREATE):
 		ret = avp_ioctl_create(ioctl_num, ioctl_param);
 		break;
-	case _IOC_NR(WRS_AVP_IOCTL_RELEASE):
+	case _IOC_NR(RTE_AVP_IOCTL_RELEASE):
 		ret = avp_ioctl_release(ioctl_num, ioctl_param);
 		break;
-	case _IOC_NR(WRS_AVP_IOCTL_QUERY):
+	case _IOC_NR(RTE_AVP_IOCTL_QUERY):
 		ret = avp_ioctl_query(ioctl_num, ioctl_param);
 		break;
 	default:
@@ -1191,7 +1191,7 @@ avp_file_open(struct inode *inode, struct file *file)
 	if (test_and_set_bit(WRS_AVP_DEV_IN_USE_BIT_NUM, &device_in_use))
 		return -EBUSY;
 
-	AVP_DBG("/dev/%s opened\n", WRS_AVP_DEVICE);
+	AVP_DBG("/dev/%s opened\n", RTE_AVP_DEVICE);
 
 	return 0;
 }
@@ -1203,7 +1203,7 @@ avp_file_release(struct inode *inode, struct file *file)
 
 	down_write(&avp_poll_lock);
 	list_for_each_entry_safe(dev, n, &avp_poll_head, poll) {
-		if (dev->mode != WRS_AVP_MODE_GUEST) {
+		if (dev->mode != RTE_AVP_MODE_GUEST) {
 			/* stop polling for responses on all local/host devices */
 			list_del(&dev->poll);
 		}
@@ -1212,7 +1212,7 @@ avp_file_release(struct inode *inode, struct file *file)
 
 	down_write(&avp_list_lock);
 	list_for_each_entry_safe(dev, n, &avp_list_head, list) {
-		if (dev->mode != WRS_AVP_MODE_GUEST) {
+		if (dev->mode != RTE_AVP_MODE_GUEST) {
 			/* destroy all local/host devices */
 			avp_thread_dev_remove(dev);
 			avp_dev_free(dev);
@@ -1224,7 +1224,7 @@ avp_file_release(struct inode *inode, struct file *file)
 	/* Clear the bit of device in use */
 	clear_bit(WRS_AVP_DEV_IN_USE_BIT_NUM, &device_in_use);
 
-	AVP_DBG("/dev/%s closed\n", WRS_AVP_DEVICE);
+	AVP_DBG("/dev/%s closed\n", RTE_AVP_DEVICE);
 
 	return 0;
 }
@@ -1245,7 +1245,7 @@ const struct file_operations avp_fops = {
 
 static struct miscdevice avp_misc = {
 	.minor = MISC_DYNAMIC_MINOR,
-	.name = WRS_AVP_DEVICE,
+	.name = RTE_AVP_DEVICE,
 	.fops = &avp_fops,
 };
 
@@ -1310,9 +1310,9 @@ avp_init(void)
 	int ret;
 
 	AVP_PRINT("######## DPDK AVP module loading v%u.%u.%u ########\n",
-		  WRS_AVP_GET_RELEASE_VERSION(version),
-		  WRS_AVP_GET_MAJOR_VERSION(version),
-		  WRS_AVP_GET_MINOR_VERSION(version));
+		  RTE_AVP_GET_RELEASE_VERSION(version),
+		  RTE_AVP_GET_MAJOR_VERSION(version),
+		  RTE_AVP_GET_MINOR_VERSION(version));
 
 	if (avp_parse_kthread_cpulist() < 0) {
 		AVP_ERR("Invalid parameter for kthread_cpu list\n");

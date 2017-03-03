@@ -32,10 +32,9 @@
 #include <linux/percpu.h>
 #include <linux/jiffies.h>
 
-#include <rte_avp_common.h>
-#include <rte_avp_fifo.h>
-#include "avp_dev.h"
 #include "avp_ctrl.h"
+
+#include <rte_avp_fifo.h>
 
 /* Control request response timeout in milliseconds */
 #define WRS_AVP_CTRL_RESPONSE_TIMEOUT 500
@@ -43,11 +42,11 @@
 int
 avp_ctrl_set_link_state(struct avp_dev *avp, unsigned state)
 {
-	struct wrs_avp_request req;
+	struct rte_avp_request req;
 	int ret;
 
 	memset(&req, 0, sizeof(req));
-	req.req_id = WRS_AVP_REQ_CFG_NETWORK_IF;
+	req.req_id = RTE_AVP_REQ_CFG_NETWORK_IF;
 	req.if_up = state;
 	ret = avp_ctrl_process_request(avp, &req);
 
@@ -57,11 +56,11 @@ avp_ctrl_set_link_state(struct avp_dev *avp, unsigned state)
 int
 avp_ctrl_set_mtu(struct avp_dev *avp, int new_mtu)
 {
-	struct wrs_avp_request req;
+	struct rte_avp_request req;
 	int ret;
 
 	memset(&req, 0, sizeof(req));
-	req.req_id = WRS_AVP_REQ_CHANGE_MTU;
+	req.req_id = RTE_AVP_REQ_CHANGE_MTU;
 	req.new_mtu = new_mtu;
 
 	ret = avp_ctrl_process_request(avp, &req);
@@ -70,13 +69,13 @@ avp_ctrl_set_mtu(struct avp_dev *avp, int new_mtu)
 }
 
 int
-avp_ctrl_set_config(struct avp_dev *avp, struct wrs_avp_device_config *config)
+avp_ctrl_set_config(struct avp_dev *avp, struct rte_avp_device_config *config)
 {
-	struct wrs_avp_request req;
+	struct rte_avp_request req;
 	int ret;
 
 	memset(&req, 0, sizeof(req));
-	req.req_id = WRS_AVP_REQ_CFG_DEVICE;
+	req.req_id = RTE_AVP_REQ_CFG_DEVICE;
 	memcpy(&req.config, config, sizeof(req.config));
 
 	ret = avp_ctrl_process_request(avp, &req);
@@ -87,11 +86,11 @@ avp_ctrl_set_config(struct avp_dev *avp, struct wrs_avp_device_config *config)
 int
 avp_ctrl_shutdown(struct avp_dev *avp)
 {
-	struct wrs_avp_request req;
+	struct rte_avp_request req;
 	int ret;
 
 	memset(&req, 0, sizeof(req));
-	req.req_id = WRS_AVP_REQ_SHUTDOWN_DEVICE;
+	req.req_id = RTE_AVP_REQ_SHUTDOWN_DEVICE;
 
 	ret = avp_ctrl_process_request(avp, &req);
 
@@ -107,7 +106,7 @@ avp_ctrl_poll_resp(struct avp_dev *avp)
 
 int
 avp_ctrl_process_request(struct avp_dev *avp,
-			 struct wrs_avp_request *req)
+			 struct rte_avp_request *req)
 {
 	int ret = -1;
 	void *resp_va;
@@ -119,7 +118,7 @@ avp_ctrl_process_request(struct avp_dev *avp,
 		return -EINVAL;
 	}
 
-	if (avp->mode != WRS_AVP_MODE_GUEST) {
+	if (avp->mode != RTE_AVP_MODE_GUEST) {
 		/*
 		 * We are running this request from ioctl context so do not
 		 * send a request to the vswitch since it will lead to
@@ -147,7 +146,7 @@ avp_ctrl_process_request(struct avp_dev *avp,
 		AVP_DBG("Discarding stale response\n");
 
 	/* Construct data */
-	memcpy(avp->sync_kva, req, sizeof(struct wrs_avp_request));
+	memcpy(avp->sync_kva, req, sizeof(struct rte_avp_request));
 	num = avp_fifo_put(avp->req_q, &avp->sync_va, 1);
 	if (num < 1) {
 		AVP_ERR("Cannot send to req_q\n");
@@ -190,7 +189,7 @@ avp_ctrl_process_request(struct avp_dev *avp,
 		goto unlock;
 	}
 
-	memcpy(req, avp->sync_kva, sizeof(struct wrs_avp_request));
+	memcpy(req, avp->sync_kva, sizeof(struct rte_avp_request));
 	ret = 0;
 
 	AVP_DBG("Result %d received for request %u\n",

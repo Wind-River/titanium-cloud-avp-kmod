@@ -36,8 +36,6 @@
 #include <linux/version.h>
 #include <linux/if_ether.h>
 
-#include <rte_avp_common.h>
-#include <rte_avp_fifo.h>
 #include "avp_dev.h"
 #include "avp_ctrl.h"
 
@@ -51,7 +49,7 @@
 /* Structure defining a guest AVP PCI device */
 struct wrs_avp_pci_dev {
 	struct pci_dev *pci_dev;
-	struct wrs_avp_device_info info;
+	struct rte_avp_device_info info;
 	struct avp_dev *avp;
 	void *addresses[PCI_STD_RESOURCE_END+1];
 	char (*msix_names)[WRS_AVP_PCI_MSIX_NAME_LEN];
@@ -70,10 +68,10 @@ struct wrs_avp_pci_dev {
 #endif
 
 const struct pci_device_id avp_pci_ids[] = {
-	{ PCI_DEVICE_SUB(WRS_AVP_PCI_VENDOR_ID,
-			 WRS_AVP_PCI_DEVICE_ID,
-			 WRS_AVP_PCI_SUB_VENDOR_ID,
-			 WRS_AVP_PCI_SUB_DEVICE_ID) },
+	{ PCI_DEVICE_SUB(RTE_AVP_PCI_VENDOR_ID,
+			 RTE_AVP_PCI_DEVICE_ID,
+			 RTE_AVP_PCI_SUB_VENDOR_ID,
+			 RTE_AVP_PCI_SUB_DEVICE_ID) },
 	{ 0 }
 };
 MODULE_DEVICE_TABLE(pci, avp_pci_ids);
@@ -126,8 +124,8 @@ avp_pci_map_regions(struct pci_dev *dev,
 static int
 avp_pci_device_version_check(uint32_t version)
 {
-	uint32_t driver = WRS_AVP_STRIP_MINOR_VERSION(WRS_AVP_KERNEL_DRIVER_VERSION);
-	uint32_t device = WRS_AVP_STRIP_MINOR_VERSION(version);
+	uint32_t driver = RTE_AVP_STRIP_MINOR_VERSION(WRS_AVP_KERNEL_DRIVER_VERSION);
+	uint32_t device = RTE_AVP_STRIP_MINOR_VERSION(version);
 
 	if (device <= driver) {
 		/* the incoming device version is less than or equal to our own */
@@ -142,8 +140,8 @@ static int
 avp_pci_check_regions(struct pci_dev *dev,
 		      struct wrs_avp_pci_dev *avp_dev)
 {
-	struct wrs_avp_memmap_info *memmap;
-	struct wrs_avp_device_info *info;
+	struct rte_avp_memmap_info *memmap;
+	struct rte_avp_device_info *info;
 	unsigned i;
 	void *ptr;
 
@@ -151,27 +149,27 @@ avp_pci_check_regions(struct pci_dev *dev,
 		ptr = avp_dev->addresses[i];
 
 		switch (i) {
-		case WRS_AVP_PCI_MEMMAP_BAR:
+		case RTE_AVP_PCI_MEMMAP_BAR:
 			if (ptr == NULL) {
 				AVP_ERR("Missing address space for BAR%u\n", i);
 				return -EINVAL;
 			}
-			memmap = (struct wrs_avp_memmap_info *)ptr;
-			if ((memmap->magic != WRS_AVP_MEMMAP_MAGIC) ||
-			    (memmap->version != WRS_AVP_MEMMAP_VERSION)) {
+			memmap = (struct rte_avp_memmap_info *)ptr;
+			if ((memmap->magic != RTE_AVP_MEMMAP_MAGIC) ||
+			    (memmap->version != RTE_AVP_MEMMAP_VERSION)) {
 				AVP_ERR("Invalid memmap magic 0x%08x and version %u\n",
 					memmap->magic, memmap->version);
 				return -EINVAL;
 			}
 			break;
 
-		case WRS_AVP_PCI_DEVICE_BAR:
+		case RTE_AVP_PCI_DEVICE_BAR:
 			if (ptr == NULL) {
 				AVP_ERR("Missing address space for BAR%u\n", i);
 				return -EINVAL;
 			}
-			info = (struct wrs_avp_device_info *)ptr;
-			if ((info->magic != WRS_AVP_DEVICE_MAGIC) ||
+			info = (struct rte_avp_device_info *)ptr;
+			if ((info->magic != RTE_AVP_DEVICE_MAGIC) ||
 			    avp_pci_device_version_check(info->version)) {
 				AVP_ERR("Invalid device info magic 0x%08x or version 0x%08x > 0x%08x\n",
 					info->magic, info->version,
@@ -180,15 +178,15 @@ avp_pci_check_regions(struct pci_dev *dev,
 			}
 			break;
 
-		case WRS_AVP_PCI_MEMORY_BAR:
-		case WRS_AVP_PCI_MMIO_BAR:
+		case RTE_AVP_PCI_MEMORY_BAR:
+		case RTE_AVP_PCI_MMIO_BAR:
 			if (ptr == NULL) {
 				AVP_ERR("Missing address space for BAR%u\n", i);
 				return -EINVAL;
 			}
 			break;
 
-		case WRS_AVP_PCI_MSIX_BAR:
+		case RTE_AVP_PCI_MSIX_BAR:
 		default:
 			/* no validation required */
 			break;
@@ -223,15 +221,15 @@ static phys_addr_t
 avp_pci_translate_address(struct wrs_avp_pci_dev *avp_dev,
 			  phys_addr_t host_phys_addr)
 {
-	struct wrs_avp_memmap_info *info;
-	struct wrs_avp_memmap *map;
+	struct rte_avp_memmap_info *info;
+	struct rte_avp_memmap *map;
 	phys_addr_t phys_addr;
 	phys_addr_t offset;
 	unsigned i;
 
-	phys_addr = virt_to_phys(avp_dev->addresses[WRS_AVP_PCI_MEMORY_BAR]);
-	info = (struct wrs_avp_memmap_info *)
-		avp_dev->addresses[WRS_AVP_PCI_MEMMAP_BAR];
+	phys_addr = virt_to_phys(avp_dev->addresses[RTE_AVP_PCI_MEMORY_BAR]);
+	info = (struct rte_avp_memmap_info *)
+		avp_dev->addresses[RTE_AVP_PCI_MEMMAP_BAR];
 
 	offset = 0;
 	for (i = 0; i < info->nb_maps; i++) {
@@ -263,21 +261,21 @@ static int
 avp_pci_create(struct pci_dev *dev,
 	       struct wrs_avp_pci_dev *avp_dev)
 {
-	struct wrs_avp_device_info *dev_info = &avp_dev->info;
-	struct wrs_avp_device_config dev_config;
-	struct wrs_avp_device_info *info;
+	struct rte_avp_device_info *dev_info = &avp_dev->info;
+	struct rte_avp_device_config dev_config;
+	struct rte_avp_device_info *info;
 	struct net_device *netdev;
 	unsigned long addr;
 	unsigned i;
 	int ret;
 
-	addr = pci_resource_start(dev, WRS_AVP_PCI_DEVICE_BAR);
+	addr = pci_resource_start(dev, RTE_AVP_PCI_DEVICE_BAR);
 	if (addr == 0) {
-		AVP_ERR("BAR%u is not mapped\n", WRS_AVP_PCI_DEVICE_BAR);
+		AVP_ERR("BAR%u is not mapped\n", RTE_AVP_PCI_DEVICE_BAR);
 		return -EFAULT;
 	}
-	info = (struct wrs_avp_device_info *)
-		avp_dev->addresses[WRS_AVP_PCI_DEVICE_BAR];
+	info = (struct rte_avp_device_info *)
+		avp_dev->addresses[RTE_AVP_PCI_DEVICE_BAR];
 
 	/* translate incoming host dev_info to guest address space */
 	memcpy(dev_info, info, sizeof(*dev_info));
@@ -290,7 +288,7 @@ avp_pci_create(struct pci_dev *dev,
 	dev_info->sync_phys = avp_pci_translate_address(avp_dev, info->sync_phys);
 	dev_info->mbuf_phys = avp_pci_translate_address(avp_dev, info->mbuf_phys);
 
-	for (i = 0; i < WRS_AVP_MAX_MEMPOOLS; i++) {
+	for (i = 0; i < RTE_AVP_MAX_MEMPOOLS; i++) {
 		if (info->pool[i].phys_addr != 0) {
 			dev_info->pool[i].phys_addr =
 				avp_pci_translate_address(avp_dev, info->pool[i].phys_addr);
@@ -307,7 +305,7 @@ avp_pci_create(struct pci_dev *dev,
 	/* setup current device configuration */
 	memset(&dev_config, 0, sizeof(dev_config));
 	dev_config.device_id = info->device_id;
-	dev_config.driver_type = WRS_AVP_DRIVER_TYPE_KERNEL;
+	dev_config.driver_type = RTE_AVP_DRIVER_TYPE_KERNEL;
 	dev_config.driver_version = WRS_AVP_KERNEL_DRIVER_VERSION;
 	dev_config.features = avp_dev->avp->features;
 	dev_config.num_tx_queues = avp_dev->avp->num_tx_queues;
@@ -335,8 +333,8 @@ avp_pci_detach(struct work_struct *work)
 {
 	struct wrs_avp_pci_dev *avp_pci_dev =
 		container_of(work, struct wrs_avp_pci_dev, detach);
-	void *registers = avp_pci_dev->addresses[WRS_AVP_PCI_MMIO_BAR];
-	uint32_t status = WRS_AVP_MIGRATION_DETACHED;
+	void *registers = avp_pci_dev->addresses[RTE_AVP_PCI_MMIO_BAR];
+	uint32_t status = RTE_AVP_MIGRATION_DETACHED;
 	int ret;
 
 	AVP_DBG("Running VM migration detach interrupt callback\n");
@@ -344,11 +342,11 @@ avp_pci_detach(struct work_struct *work)
 	ret = avp_dev_detach(avp_pci_dev->avp);
 	if (ret < 0) {
 		AVP_ERR("Failed to detach AVP device\n");
-		status = WRS_AVP_MIGRATION_ERROR;
+		status = RTE_AVP_MIGRATION_ERROR;
 	}
 
 	/* acknowledge that we have changed our state */
-	iowrite32(status, registers + WRS_AVP_MIGRATION_ACK_OFFSET);
+	iowrite32(status, registers + RTE_AVP_MIGRATION_ACK_OFFSET);
 }
 
 /* workqueue handler to run interrupt task from process context */
@@ -357,8 +355,8 @@ avp_pci_attach(struct work_struct *work)
 {
 	struct wrs_avp_pci_dev *avp_pci_dev =
 		container_of(work, struct wrs_avp_pci_dev, attach);
-	void *registers = avp_pci_dev->addresses[WRS_AVP_PCI_MMIO_BAR];
-	uint32_t status = WRS_AVP_MIGRATION_ATTACHED;
+	void *registers = avp_pci_dev->addresses[RTE_AVP_PCI_MMIO_BAR];
+	uint32_t status = RTE_AVP_MIGRATION_ATTACHED;
 	struct avp_dev *avp;
 	int ret;
 
@@ -367,7 +365,7 @@ avp_pci_attach(struct work_struct *work)
 	ret = avp_pci_create(avp_pci_dev->pci_dev, avp_pci_dev);
 	if (ret < 0) {
 		AVP_ERR("Failed to attach AVP device\n");
-		status = WRS_AVP_MIGRATION_ERROR;
+		status = RTE_AVP_MIGRATION_ERROR;
 		goto done;
 	}
 
@@ -377,33 +375,33 @@ avp_pci_attach(struct work_struct *work)
 
 done:
 	/* acknowledge that we have changed our state */
-	iowrite32(status, registers + WRS_AVP_MIGRATION_ACK_OFFSET);
+	iowrite32(status, registers + RTE_AVP_MIGRATION_ACK_OFFSET);
 }
 
 static irqreturn_t
 avp_pci_interrupt_actions(struct wrs_avp_pci_dev *avp_pci_dev, int irq)
 {
-	void *registers = avp_pci_dev->addresses[WRS_AVP_PCI_MMIO_BAR];
+	void *registers = avp_pci_dev->addresses[RTE_AVP_PCI_MMIO_BAR];
 	uint32_t value;
 
 	/* read the interrupt status register
 	 *	 note:	this register clears on read so all raised interrupts must be
 	 *			handled or remembered for later processing
 	 */
-	value = ioread32(registers + WRS_AVP_INTERRUPT_STATUS_OFFSET);
+	value = ioread32(registers + RTE_AVP_INTERRUPT_STATUS_OFFSET);
 
-	if (value | WRS_AVP_MIGRATION_INTERRUPT_MASK) {
+	if (value | RTE_AVP_MIGRATION_INTERRUPT_MASK) {
 		/*
 		 * Handle migration interrupt by deferring the work to a workqueue
 		 * since we need to do some things that are unsafe within an interrupt
 		 * context.
 		 */
-		value = ioread32(registers + WRS_AVP_MIGRATION_STATUS_OFFSET);
+		value = ioread32(registers + RTE_AVP_MIGRATION_STATUS_OFFSET);
 		switch (value) {
-		case WRS_AVP_MIGRATION_DETACHED:
+		case RTE_AVP_MIGRATION_DETACHED:
 			queue_work(avp_pci_dev->workqueue, &avp_pci_dev->detach);
 			break;
-		case WRS_AVP_MIGRATION_ATTACHED:
+		case RTE_AVP_MIGRATION_ATTACHED:
 			queue_work(avp_pci_dev->workqueue, &avp_pci_dev->attach);
 			break;
 		default:
@@ -425,7 +423,7 @@ avp_pci_interrupt_handler(int irq, void *data)
 {
 	struct wrs_avp_pci_dev *avp_pci_dev = data;
 	struct pci_dev *pci_dev = avp_pci_dev->pci_dev;
-	void *registers = avp_pci_dev->addresses[WRS_AVP_PCI_MMIO_BAR];
+	void *registers = avp_pci_dev->addresses[RTE_AVP_PCI_MMIO_BAR];
 	irqreturn_t ret = IRQ_NONE;
 	unsigned long flags;
 	uint32_t value;
@@ -470,7 +468,7 @@ avp_pci_setup_msi_interrupts(struct pci_dev *dev,
 	int ret;
 
 	/* Use the maximum number of vectors */
-	avp_pci_dev->msix_vectors = WRS_AVP_MAX_MSIX_VECTORS;
+	avp_pci_dev->msix_vectors = RTE_AVP_MAX_MSIX_VECTORS;
 
 	/* Allocate MSI-X vectors */
 	size = avp_pci_dev->msix_vectors * sizeof(avp_pci_dev->msix_entries[0]);
@@ -571,7 +569,7 @@ static int
 avp_pci_setup_interrupts(struct pci_dev *dev,
 			 struct wrs_avp_pci_dev *avp_pci_dev)
 {
-	void *registers = avp_pci_dev->addresses[WRS_AVP_PCI_MMIO_BAR];
+	void *registers = avp_pci_dev->addresses[RTE_AVP_PCI_MMIO_BAR];
 	int ret;
 
 	ret = pci_find_capability(dev, PCI_CAP_ID_MSIX);
@@ -586,8 +584,8 @@ avp_pci_setup_interrupts(struct pci_dev *dev,
 
 	if (ret == 0) {
 		/* enable all interrupts */
-		iowrite32(WRS_AVP_ALL_INTERRUPTS_MASK,
-				  registers + WRS_AVP_INTERRUPT_MASK_OFFSET);
+		iowrite32(RTE_AVP_APP_INTERRUPTS_MASK,
+				  registers + RTE_AVP_INTERRUPT_MASK_OFFSET);
 	}
 
 	return 0;
@@ -597,14 +595,14 @@ static int
 avp_pci_release_interrupts(struct pci_dev *dev,
 			   struct wrs_avp_pci_dev *avp_pci_dev)
 {
-	void *registers = avp_pci_dev->addresses[WRS_AVP_PCI_MMIO_BAR];
+	void *registers = avp_pci_dev->addresses[RTE_AVP_PCI_MMIO_BAR];
 	struct msix_entry *entry;
 	unsigned i;
 
 	if (registers) {
 		/* disable device interrupts */
-		iowrite32(WRS_AVP_NO_INTERRUPTS_MASK,
-				  registers + WRS_AVP_INTERRUPT_MASK_OFFSET);
+		iowrite32(RTE_AVP_NO_INTERRUPTS_MASK,
+				  registers + RTE_AVP_INTERRUPT_MASK_OFFSET);
 	}
 
 	if (avp_pci_dev->msix_vectors > 0) {
@@ -633,14 +631,14 @@ avp_pci_release_interrupts(struct pci_dev *dev,
 static int
 avp_pci_migration_pending(struct wrs_avp_pci_dev *avp_pci_dev)
 {
-	void *registers = avp_pci_dev->addresses[WRS_AVP_PCI_MMIO_BAR];
+	void *registers = avp_pci_dev->addresses[RTE_AVP_PCI_MMIO_BAR];
 	uint32_t status;
 
 	if (registers) {
-		status = ioread32(registers + WRS_AVP_MIGRATION_STATUS_OFFSET);
-		if (status == WRS_AVP_MIGRATION_DETACHED) {
+		status = ioread32(registers + RTE_AVP_MIGRATION_STATUS_OFFSET);
+		if (status == RTE_AVP_MIGRATION_DETACHED) {
 			/* migration is in progress; ack it if we have not already */
-			iowrite32(status, registers + WRS_AVP_MIGRATION_ACK_OFFSET);
+			iowrite32(status, registers + RTE_AVP_MIGRATION_ACK_OFFSET);
 			return 1;
 		}
 	}
