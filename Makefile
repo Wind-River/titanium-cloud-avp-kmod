@@ -36,6 +36,10 @@ SRCS-y += avp_ethtool.c
 ifneq ($(RTE_SDK),)
 ## DPDK build
 include $(RTE_SDK)/mk/rte.vars.mk
+
+# The AVP PMD must build first so that the public header files are published
+DEPDIRS-y += drivers
+
 ## DPDK specific flags
 MODULE_CFLAGS += -I$(SRCDIR)
 MODULE_CFLAGS += -I$(RTE_OUTPUT)/include
