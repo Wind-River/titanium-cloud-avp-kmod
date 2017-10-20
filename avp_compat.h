@@ -26,6 +26,7 @@
 #ifndef _AVP_COMPAT_H_
 #define _AVP_COMPAT_H_
 
+#include <linux/version.h>
 
 #ifndef RTE_CACHE_LINE_SIZE
 /* not available for kernel builds */
@@ -34,5 +35,16 @@
 
 /* Custom define for dpdk user-space builds */
 typedef phys_addr_t rte_iova_t;
+
+/* Determine whether the netif_trans_update function is available */
+#ifdef RHEL_RELEASE_VERSION
+#if (RHEL_RELEASE_CODE >= RHEL_RELEASE_VERSION(7, 4)
+#define HAVE_TRANS_START_HELPER
+#endif
+#else
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 7, 0))
+#define HAVE_TRANS_START_HELPER
+#endif
+#endif
 
 #endif /* _AVP_COMPAT_H_ */
