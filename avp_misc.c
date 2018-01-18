@@ -594,20 +594,20 @@ avp_dev_free(struct avp_dev *dev)
 	if (!dev)
 		return -ENODEV;
 
-	if (dev->net_dev) {
-		unregister_netdev(dev->net_dev);
-		free_netdev(dev->net_dev);
-		dev->net_dev = NULL;
-	}
-
-	if (dev->stats) {
+    if (dev->stats) {
 		free_percpu(dev->stats);
 		dev->stats = NULL;
 	}
 
 	avp_dev_flush_cache(dev);
 
-	return 0;
+    if (dev->net_dev) {
+        unregister_netdev(dev->net_dev);
+        free_netdev(dev->net_dev);
+        dev->net_dev = NULL;
+    }
+
+    return 0;
 }
 
 /* lookup an AVP device by unique device id */
@@ -1008,10 +1008,7 @@ _avp_dev_release(struct avp_dev *dev)
 		avp_thread_dev_remove(dev);
 	}
 
-	/* delete and free netdev object */
-	avp_dev_free(dev);
-
-	/* remove the device from the response polling list */
+    /* remove the device from the response polling list */
 	down_write(&avp_poll_lock);
 	list_del(&dev->poll);
 	up_write(&avp_poll_lock);
@@ -1021,7 +1018,10 @@ _avp_dev_release(struct avp_dev *dev)
 	list_del(&dev->list);
 	up_write(&avp_list_lock);
 
-	return 0;
+    /* delete and free netdev object */
+    avp_dev_free(dev);
+
+    return 0;
 }
 
 int
