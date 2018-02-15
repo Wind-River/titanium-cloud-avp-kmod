@@ -39,6 +39,7 @@ REQUIREMENTS
            loadable module support
            PCI device support
         gcc compiler
+        DPDK v17.05+
 
     VM Runtime:
         AVP type virtual NIC
@@ -53,13 +54,19 @@ the applicable guest linux distribution as an external kernel module.
 COMPILE
 =======
 Clone the AVP kernel module driver repo and compile.  This will produce the
-wrs_avp.ko kernel module.
+wrs_avp.ko kernel module.  The compilation of this driver depends on an
+installed set of DPDK library headers.  Refer to the documentation at
+dpdk.org to build and install the DPDK software.  The example below assumes
+a DPDK installation at /usr/local/share/dpdk, and Linux kernel source headers
+installed at make KSRC=/usr/src/linux-headers-$(uname -r).
 
-   mkdir -p /tmp/wrs; cd /tmp/wrs
+   mkdir -p /tmp/wrs
+   cd /tmp/wrs
    git clone https://github.com/Wind-River/titanium-cloud-avp-kmod.git
    cd titanium-cloud-avp-kmod
-   unset RTE_SDK
-   make
+   export RTE_SDK=/usr/local/share/dpdk
+   export RTE_TARGET=x86_64-native-linuxapp-gcc
+   make KSRC=/usr/src/linux-headers-$(uname -r)
 
 
 INSTALL
@@ -69,7 +76,7 @@ command can be run from the same directory as the previous step.  This will
 install the kernel module to the default external module directory which is
 specific to your system.  Typically this is:
 
-   /lib/modules/`uname -r`/extra
+   /lib/modules/$(uname -r)/extra
 
    sudo make modules_install
    sudo depmod -a
