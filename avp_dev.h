@@ -43,6 +43,12 @@
 #include <rte_avp_common.h>
 
 
+/**
+ * Represents the current version of the AVP guest kernel drivers
+ */
+#define WRS_AVP_KERNEL_DRIVER_VERSION  RTE_AVP_MAKE_VERSION(1, 2, 14)
+
+
 /* Defines the number receive thread CPU yield time in usecs */
 #define WRS_AVP_KTHREAD_RESCHEDULE_INTERVAL (1)
 
@@ -51,9 +57,6 @@
 
 /* Defines the maximum number of data buffers stored in the Tx cache */
 #define WRS_AVP_QUEUE_DESC_CACHE_SIZE (32)
-
-/* Defines the current kernel AVP driver version number */
-#define WRS_AVP_KERNEL_DRIVER_VERSION RTE_AVP_CURRENT_GUEST_VERSION
 
 /**
  * A structure to hold the per-cpu statistics for a device.
