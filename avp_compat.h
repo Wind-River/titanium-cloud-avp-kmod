@@ -32,4 +32,7 @@
 #define RTE_CACHE_LINE_SIZE 64
 #endif
 
+/* Custom define for dpdk user-space builds */
+typedef phys_addr_t rte_iova_t;
+
 #endif /* _AVP_COMPAT_H_ */
