@@ -38,7 +38,7 @@ typedef phys_addr_t rte_iova_t;
 
 /* Determine whether the netif_trans_update function is available */
 #ifdef RHEL_RELEASE_VERSION
-#if (RHEL_RELEASE_CODE >= RHEL_RELEASE_VERSION(7, 4)
+#if (RHEL_RELEASE_CODE >= RHEL_RELEASE_VERSION(7, 4))
 #define HAVE_TRANS_START_HELPER
 #endif
 #else
