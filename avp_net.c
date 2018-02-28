@@ -507,7 +507,11 @@ avp_net_change_mtu(struct net_device *dev, int new_mtu)
 	return 0;
 }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 11, 0)
 static struct rtnl_link_stats64 *
+#else
+static void
+#endif
 avp_net_stats(struct net_device *dev, struct rtnl_link_stats64 *tot)
 {
 	struct avp_dev *avp = netdev_priv(dev);
@@ -550,7 +554,9 @@ avp_net_stats(struct net_device *dev, struct rtnl_link_stats64 *tot)
 		tot->tx_fifo_errors += tx_fifo_errors;
 	}
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 11, 0)
 	return tot;
+#endif
 }
 
 static int
