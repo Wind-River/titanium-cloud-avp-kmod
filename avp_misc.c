@@ -1328,7 +1328,7 @@ avp_init(void)
 	ret = avp_thread_init();
 	if (ret != 0) {
 		AVP_ERR("Failed to initialize threads\n");
-		return ret;
+		goto out_dereg;
 	}
 
 #ifdef CONFIG_HOTPLUG_CPU
@@ -1339,12 +1339,16 @@ avp_init(void)
 	ret = avp_pci_init();
 	if (ret != 0) {
 		AVP_ERR("Failed to register PCI driver\n");
-		return ret;
+		goto out_dereg;
 	}
 
 	AVP_PRINT("######## DPDK AVP module loaded	########\n");
 
 	return 0;
+
+out_dereg:
+	misc_deregister(&avp_misc);
+	return ret;
 }
 
 static void __exit
