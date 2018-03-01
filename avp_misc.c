@@ -483,7 +483,7 @@ avp_cpu_online_action(unsigned int cpu)
 
 out:
 	mutex_unlock(&avp_thread_lock);
-	return notifier_from_errno(ret);
+	return ret;
 }
 
 static int
@@ -527,7 +527,7 @@ avp_cpu_offline_action(unsigned int cpu)
 
 out:
 	mutex_unlock(&avp_thread_lock);
-	return notifier_from_errno(ret);
+	return ret;
 }
 
 static int
@@ -542,11 +542,11 @@ avp_cpu_hotplug_callback(struct notifier_block *nfb,
 		/* handle a failure to offline a cpu */
 	case CPU_ONLINE:
 	case CPU_ONLINE_FROZEN:
-		ret = avp_cpu_online_action(cpu);
+		ret = notifier_from_errno(avp_cpu_online_action(cpu));
 		break;
 	case CPU_DOWN_PREPARE:
 	case CPU_DOWN_PREPARE_FROZEN:
-		ret = avp_cpu_offline_action(cpu);
+		ret = notifier_from_errno(avp_cpu_offline_action(cpu));
 		break;
 	default:
 		ret = NOTIFY_OK;
