@@ -1329,7 +1329,11 @@ avp_init(void)
 	}
 
 #ifdef CONFIG_HOTPLUG_CPU
-	register_hotcpu_notifier(&avp_cpu_hotplug_notifier);
+	ret = register_hotcpu_notifier(&avp_cpu_hotplug_notifier);
+	if (ret < 0) {
+		AVP_ERR("Failed to setup cpu hotplug\n");
+		goto out_dereg;
+	}
 #endif
 
 	/* Setup guest PCI driver */
