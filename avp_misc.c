@@ -85,6 +85,7 @@ static char *kthread_cpulist;
 static int kthread_policy = SCHED_RR;
 static int kthread_priority = 1;
 static cpumask_t avp_cpumask; /* allowed CPU mask for kernel threads */
+static cpumask_t avp_cpumask_candidates;
 static struct avp_thread avp_threads[NR_CPUS] ____cacheline_aligned;
 static struct avp_thread avp_trace_thread ____cacheline_aligned;
 static DEFINE_MUTEX(avp_thread_lock);
@@ -432,7 +433,6 @@ static int
 avp_cpu_online_action(unsigned int cpu)
 {
 	struct avp_thread *busiest, *tmp, *thread = &avp_threads[cpu];
-	cpumask_var_t candidates;
 	unsigned transferred;
 	int ret = -EINVAL;
 	int c;
@@ -443,11 +443,7 @@ avp_cpu_online_action(unsigned int cpu)
 		goto out;
 	}
 
-	if (!zalloc_cpumask_var(&candidates, GFP_KERNEL)) {
-		ret = -ENOMEM;
-		goto out;
-	}
-	cpumask_andnot(candidates, cpu_online_mask, cpumask_of(cpu));
+	cpumask_andnot(&avp_cpumask_candidates, cpu_online_mask, cpumask_of(cpu));
 
 	thread->avp_kthread = kthread_create_on_node(avp_thread_process,
 						     (void *)thread,
@@ -457,7 +453,7 @@ avp_cpu_online_action(unsigned int cpu)
 		thread->avp_kthread = NULL;
 		AVP_ERR("Unable to create kernel thread: %u\n", thread->cpu);
 		ret = -ECANCELED;
-		goto out_free;
+		goto out;
 	}
 
 	kthread_bind(thread->avp_kthread, thread->cpu);
@@ -466,7 +462,7 @@ avp_cpu_online_action(unsigned int cpu)
 	do {
 		busiest = NULL;
 		transferred = 0;
-		for_each_cpu_and(c, &avp_cpumask, candidates) {
+		for_each_cpu_and(c, &avp_cpumask, &avp_cpumask_candidates) {
 			tmp = &avp_threads[c];
 			if (busiest == NULL || tmp->rx_count > busiest->rx_count)
 				busiest = tmp;
@@ -484,8 +480,6 @@ avp_cpu_online_action(unsigned int cpu)
 	avp_cpu_dump();
 	ret = 0;
 
-out_free:
-	free_cpumask_var(candidates);
 out:
 	mutex_unlock(&avp_thread_lock);
 	return notifier_from_errno(ret);
@@ -496,7 +490,6 @@ avp_cpu_offline_action(unsigned int cpu)
 {
 	struct avp_thread *thread = &avp_threads[cpu];
 	struct avp_dev_rx_queue *queue;
-	cpumask_var_t candidates;
 	int ret = -EINVAL;
 	unsigned q;
 
@@ -506,11 +499,7 @@ avp_cpu_offline_action(unsigned int cpu)
 		goto out;
 	}
 
-	if (!zalloc_cpumask_var(&candidates, GFP_KERNEL)) {
-		ret = -ENOMEM;
-		goto out;
-	}
-	cpumask_andnot(candidates, cpu_online_mask, cpumask_of(cpu));
+	cpumask_andnot(&avp_cpumask_candidates, cpu_online_mask, cpumask_of(cpu));
 
 	kthread_stop(thread->avp_kthread);
 	thread->avp_kthread = NULL;
@@ -518,12 +507,12 @@ avp_cpu_offline_action(unsigned int cpu)
 	spin_lock(&thread->lock);
 	for (q = 0; q < thread->rx_count; q++) {
 		queue = &thread->rx_queues[q];
-		ret = _avp_thread_queue_assign(queue->avp, queue->queue_id, candidates);
+		ret = _avp_thread_queue_assign(queue->avp, queue->queue_id, &avp_cpumask_candidates);
 		if (ret) {
 			spin_unlock(&thread->lock);
 			AVP_ERR("Failed to re-assign %s/%u off of avp/%u, ret=%d\n",
 					netdev_name(queue->avp->net_dev), queue->queue_id, cpu, ret);
-			goto out_free;
+			goto out;
 		}
 	}
 	thread->rx_count = 0;
@@ -533,8 +522,6 @@ avp_cpu_offline_action(unsigned int cpu)
 	avp_cpu_dump();
 	ret = 0;
 
-out_free:
-	free_cpumask_var(candidates);
 out:
 	mutex_unlock(&avp_thread_lock);
 	return notifier_from_errno(ret);
