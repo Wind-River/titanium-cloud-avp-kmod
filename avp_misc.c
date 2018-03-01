@@ -98,6 +98,10 @@ static struct list_head avp_list_head = LIST_HEAD_INIT(avp_list_head);
 static DECLARE_RWSEM(avp_poll_lock);
 static struct list_head avp_poll_head = LIST_HEAD_INIT(avp_poll_head);
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
+/* Hotplug state */
+static enum cpuhp_state avp_cpuhp_state;
+#endif
 /*****************************************************************************
  *
  * AVP RX thread utility functions
@@ -527,6 +531,7 @@ out:
 	return ret;
 }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0)
 static int
 avp_cpu_hotplug_callback(struct notifier_block *nfb,
 			 unsigned long action, void *hcpu)
@@ -555,6 +560,8 @@ avp_cpu_hotplug_callback(struct notifier_block *nfb,
 static struct notifier_block avp_cpu_hotplug_notifier = {
 	.notifier_call = avp_cpu_hotplug_callback,
 };
+#endif
+
 #endif
 
 
@@ -1329,24 +1336,40 @@ avp_init(void)
 	}
 
 #ifdef CONFIG_HOTPLUG_CPU
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0)
 	ret = register_hotcpu_notifier(&avp_cpu_hotplug_notifier);
+#else
+	ret = cpuhp_setup_state_nocalls(CPUHP_AP_ONLINE_DYN,
+				"net/wrs_avp:online",
+				avp_cpu_online_action,
+				avp_cpu_offline_action);
+#endif
 	if (ret < 0) {
 		AVP_ERR("Failed to setup cpu hotplug\n");
 		goto out_dereg;
 	}
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
+	avp_cpuhp_state = ret;
+#endif
 #endif
 
 	/* Setup guest PCI driver */
 	ret = avp_pci_init();
 	if (ret != 0) {
 		AVP_ERR("Failed to register PCI driver\n");
-		goto out_dereg;
+		goto out_cpuhp;
 	}
 
 	AVP_PRINT("######## DPDK AVP module loaded	########\n");
 
 	return 0;
 
+out_cpuhp:
+#ifdef CONFIG_HOTPLUG_CPU
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
+	cpuhp_remove_state_nocalls(avp_cpuhp_state);
+#endif
+#endif
 out_dereg:
 	misc_deregister(&avp_misc);
 	return ret;
@@ -1358,7 +1381,11 @@ avp_exit(void)
 	AVP_PRINT("####### DPDK AVP module unloading  #######\n");
 
 #ifdef CONFIG_HOTPLUG_CPU
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0)
 	unregister_hotcpu_notifier(&avp_cpu_hotplug_notifier);
+#else
+	cpuhp_remove_state_nocalls(avp_cpuhp_state);
+#endif
 #endif
 
 	avp_pci_exit();
