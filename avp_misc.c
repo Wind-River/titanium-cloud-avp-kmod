@@ -1402,8 +1402,8 @@ module_init(avp_init);
 module_exit(avp_exit);
 
 module_param(kthread_cpulist, charp, S_IRUGO);
-MODULE_PARM_DESC(kthread_cpulist, "Kernel thread cpu list (default all)\n");
+MODULE_PARM_DESC(kthread_cpulist, "Kernel thread cpu list (default all)");
 module_param(kthread_policy, int, S_IRUGO);
-MODULE_PARM_DESC(kthread_policy, "Kernel thread scheduling policy\n");
+MODULE_PARM_DESC(kthread_policy, "Kernel thread scheduling policy");
 module_param(kthread_priority, int, S_IRUGO);
-MODULE_PARM_DESC(kthread_priority, "Kernel thread scheduling priority\n");
+MODULE_PARM_DESC(kthread_priority, "Kernel thread scheduling priority");
