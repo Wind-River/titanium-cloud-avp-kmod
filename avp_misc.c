@@ -604,7 +604,6 @@ avp_dev_free(struct avp_dev *dev)
     if (dev->net_dev) {
         unregister_netdev(dev->net_dev);
         free_netdev(dev->net_dev);
-        dev->net_dev = NULL;
     }
 
     return 0;
