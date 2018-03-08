@@ -594,19 +594,19 @@ avp_dev_free(struct avp_dev *dev)
 	if (!dev)
 		return -ENODEV;
 
-    if (dev->stats) {
+	if (dev->stats) {
 		free_percpu(dev->stats);
 		dev->stats = NULL;
 	}
 
 	avp_dev_flush_cache(dev);
 
-    if (dev->net_dev) {
-        unregister_netdev(dev->net_dev);
-        free_netdev(dev->net_dev);
-    }
+	if (dev->net_dev) {
+		unregister_netdev(dev->net_dev);
+		free_netdev(dev->net_dev);
+	}
 
-    return 0;
+	return 0;
 }
 
 /* lookup an AVP device by unique device id */
@@ -650,10 +650,10 @@ avp_dev_validate(struct rte_avp_device_info *info)
 
 /*
  * During VM live migrations it is necessary to detach the AVP device from its
- * (host-provided) memory.	This is because the contents and layout of the
- * memory will change as the VM is migrated to a new host.	This function
+ * (host-provided) memory. This is because the contents and layout of the
+ * memory will change as the VM is migrated to a new host. This function
  * essentially stops the net_device but does not remove it from the system so
- * that applications are not impacted beyond minimal message loss.	After the
+ * that applications are not impacted beyond minimal message loss. After the
  * migration the device will be re-attached to its memory.
  */
 int
@@ -668,7 +668,7 @@ avp_dev_detach(struct avp_dev *avp)
 	}
 
 	AVP_INFO("detaching netdev %s from device 0x%llx\n",
-			 net_dev->name, avp->device_id);
+			net_dev->name, avp->device_id);
 
 	/* update status */
 	avp->status = WRS_AVP_DEV_STATUS_DETACHED;
@@ -807,8 +807,8 @@ avp_dev_configure(struct avp_dev *avp, struct rte_avp_device_info *dev_info)
 
 	rtnl_lock();
 	/* inform the stack of our actual number of in use queues
-	 *	note:  when setting rx/tx queue counts on netdevices that are already
-	 *		   registered (i.e., live migration) we need to hold the RTNL lock.
+	 * note: when setting rx/tx queue counts on netdevices that are already
+	 * registered (i.e., live migration) we need to hold the RTNL lock.
 	 */
 	netif_set_real_num_tx_queues(avp->net_dev, avp->num_tx_queues);
 	netif_set_real_num_rx_queues(avp->net_dev, avp->num_rx_queues);
@@ -1007,7 +1007,7 @@ _avp_dev_release(struct avp_dev *dev)
 		avp_thread_dev_remove(dev);
 	}
 
-    /* remove the device from the response polling list */
+	/* remove the device from the response polling list */
 	down_write(&avp_poll_lock);
 	list_del(&dev->poll);
 	up_write(&avp_poll_lock);
@@ -1017,10 +1017,10 @@ _avp_dev_release(struct avp_dev *dev)
 	list_del(&dev->list);
 	up_write(&avp_list_lock);
 
-    /* delete and free netdev object */
-    avp_dev_free(dev);
+	/* delete and free netdev object */
+	avp_dev_free(dev);
 
-    return 0;
+	return 0;
 }
 
 int
