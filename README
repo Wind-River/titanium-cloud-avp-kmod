@@ -78,7 +78,7 @@ specific to your system.  Typically this is:
 
    /lib/modules/$(uname -r)/extra
 
-   sudo make modules_install
+   sudo make KSRC=/usr/src/linux-headers-$(uname -r) modules_install
    sudo depmod -a
    sudo modprobe wrs_avp
 
