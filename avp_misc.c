@@ -453,7 +453,7 @@ avp_cpu_online_action(unsigned int cpu)
 	thread->avp_kthread = kthread_create_on_node(avp_thread_process,
 						     (void *)thread,
 						     cpu_to_node(cpu),
-						     "avp/%d", cpu);
+                             "avp-rx/%d", cpu);
 	if (IS_ERR(thread->avp_kthread)) {
 		thread->avp_kthread = NULL;
 		AVP_ERR("Unable to create kernel thread: %u\n", thread->cpu);
@@ -517,7 +517,7 @@ avp_cpu_offline_action(unsigned int cpu)
 					       &avp_cpumask_candidates);
 		if (ret) {
 			spin_unlock(&thread->lock);
-			AVP_ERR("Failed to re-assign %s/%u off of avp/%u, ret=%d\n",
+            AVP_ERR("Failed to re-assign %s/%u off of avp-rx/%u, ret=%d\n",
 					netdev_name(queue->avp->net_dev), queue->queue_id, cpu, ret);
 			goto out;
 		}
