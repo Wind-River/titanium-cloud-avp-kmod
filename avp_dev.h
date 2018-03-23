@@ -46,7 +46,7 @@
 /**
  * Represents the current version of the AVP guest kernel drivers
  */
-#define WRS_AVP_KERNEL_DRIVER_VERSION  RTE_AVP_MAKE_VERSION(1, 2, 14)
+#define WRS_AVP_KERNEL_DRIVER_VERSION  RTE_AVP_MAKE_VERSION(1, 2, 15)
 
 
 /* Defines the number receive thread CPU yield time in usecs */
