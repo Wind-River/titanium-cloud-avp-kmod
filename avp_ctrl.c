@@ -31,6 +31,9 @@
 #include <linux/delay.h>
 #include <linux/percpu.h>
 #include <linux/jiffies.h>
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
+#include <linux/sched/signal.h>
+#endif
 
 #include "avp_ctrl.h"
 

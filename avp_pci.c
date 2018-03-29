@@ -496,7 +496,11 @@ avp_pci_setup_msi_interrupts(struct pci_dev *dev,
 
 retry:
 	/* Enable interrupt vectors */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 12, 0)
 	ret = pci_enable_msix(dev,
+#else
+	ret = pci_enable_msix_exact(dev,
+#endif
 						  avp_pci_dev->msix_entries,
 						  avp_pci_dev->msix_vectors);
 	if ((ret < 0) || (ret == avp_pci_dev->msix_vectors)) {

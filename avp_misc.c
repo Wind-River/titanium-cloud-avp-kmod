@@ -47,6 +47,9 @@
 #include <linux/rtnetlink.h>
 #include <linux/sched.h>
 #include <linux/version.h>
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
+#include <linux/sched/types.h>
+#endif
 
 #include "avp_dev.h"
 #include "avp_ctrl.h"
@@ -82,6 +85,7 @@ static char *kthread_cpulist;
 static int kthread_policy = SCHED_RR;
 static int kthread_priority = 1;
 static cpumask_t avp_cpumask; /* allowed CPU mask for kernel threads */
+static cpumask_t avp_cpumask_candidates;
 static struct avp_thread avp_threads[NR_CPUS] ____cacheline_aligned;
 static struct avp_thread avp_trace_thread ____cacheline_aligned;
 static DEFINE_MUTEX(avp_thread_lock);
@@ -94,6 +98,10 @@ static struct list_head avp_list_head = LIST_HEAD_INIT(avp_list_head);
 static DECLARE_RWSEM(avp_poll_lock);
 static struct list_head avp_poll_head = LIST_HEAD_INIT(avp_poll_head);
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
+/* Hotplug state */
+static enum cpuhp_state avp_cpuhp_state;
+#endif
 /*****************************************************************************
  *
  * AVP RX thread utility functions
@@ -429,7 +437,6 @@ static int
 avp_cpu_online_action(unsigned int cpu)
 {
 	struct avp_thread *busiest, *tmp, *thread = &avp_threads[cpu];
-	cpumask_var_t candidates;
 	unsigned transferred;
 	int ret = -EINVAL;
 	int c;
@@ -440,11 +447,7 @@ avp_cpu_online_action(unsigned int cpu)
 		goto out;
 	}
 
-	if (!zalloc_cpumask_var(&candidates, GFP_KERNEL)) {
-		ret = -ENOMEM;
-		goto out;
-	}
-	cpumask_andnot(candidates, cpu_online_mask, cpumask_of(cpu));
+	cpumask_andnot(&avp_cpumask_candidates, cpu_online_mask, cpumask_of(cpu));
 
 	thread->avp_kthread = kthread_create_on_node(avp_thread_process,
 						     (void *)thread,
@@ -454,7 +457,7 @@ avp_cpu_online_action(unsigned int cpu)
 		thread->avp_kthread = NULL;
 		AVP_ERR("Unable to create kernel thread: %u\n", thread->cpu);
 		ret = -ECANCELED;
-		goto out_free;
+		goto out;
 	}
 
 	kthread_bind(thread->avp_kthread, thread->cpu);
@@ -463,7 +466,7 @@ avp_cpu_online_action(unsigned int cpu)
 	do {
 		busiest = NULL;
 		transferred = 0;
-		for_each_cpu_and(c, &avp_cpumask, candidates) {
+		for_each_cpu_and(c, &avp_cpumask, &avp_cpumask_candidates) {
 			tmp = &avp_threads[c];
 			if (busiest == NULL || tmp->rx_count > busiest->rx_count)
 				busiest = tmp;
@@ -481,11 +484,9 @@ avp_cpu_online_action(unsigned int cpu)
 	avp_cpu_dump();
 	ret = 0;
 
-out_free:
-	free_cpumask_var(candidates);
 out:
 	mutex_unlock(&avp_thread_lock);
-	return notifier_from_errno(ret);
+	return ret;
 }
 
 static int
@@ -493,7 +494,6 @@ avp_cpu_offline_action(unsigned int cpu)
 {
 	struct avp_thread *thread = &avp_threads[cpu];
 	struct avp_dev_rx_queue *queue;
-	cpumask_var_t candidates;
 	int ret = -EINVAL;
 	unsigned q;
 
@@ -503,11 +503,7 @@ avp_cpu_offline_action(unsigned int cpu)
 		goto out;
 	}
 
-	if (!zalloc_cpumask_var(&candidates, GFP_KERNEL)) {
-		ret = -ENOMEM;
-		goto out;
-	}
-	cpumask_andnot(candidates, cpu_online_mask, cpumask_of(cpu));
+	cpumask_andnot(&avp_cpumask_candidates, cpu_online_mask, cpumask_of(cpu));
 
 	kthread_stop(thread->avp_kthread);
 	thread->avp_kthread = NULL;
@@ -515,12 +511,12 @@ avp_cpu_offline_action(unsigned int cpu)
 	spin_lock(&thread->lock);
 	for (q = 0; q < thread->rx_count; q++) {
 		queue = &thread->rx_queues[q];
-		ret = _avp_thread_queue_assign(queue->avp, queue->queue_id, candidates);
+		ret = _avp_thread_queue_assign(queue->avp, queue->queue_id, &avp_cpumask_candidates);
 		if (ret) {
 			spin_unlock(&thread->lock);
 			AVP_ERR("Failed to re-assign %s/%u off of avp/%u, ret=%d\n",
 					netdev_name(queue->avp->net_dev), queue->queue_id, cpu, ret);
-			goto out_free;
+			goto out;
 		}
 	}
 	thread->rx_count = 0;
@@ -530,13 +526,12 @@ avp_cpu_offline_action(unsigned int cpu)
 	avp_cpu_dump();
 	ret = 0;
 
-out_free:
-	free_cpumask_var(candidates);
 out:
 	mutex_unlock(&avp_thread_lock);
-	return notifier_from_errno(ret);
+	return ret;
 }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0)
 static int
 avp_cpu_hotplug_callback(struct notifier_block *nfb,
 			 unsigned long action, void *hcpu)
@@ -549,11 +544,11 @@ avp_cpu_hotplug_callback(struct notifier_block *nfb,
 		/* handle a failure to offline a cpu */
 	case CPU_ONLINE:
 	case CPU_ONLINE_FROZEN:
-		ret = avp_cpu_online_action(cpu);
+		ret = notifier_from_errno(avp_cpu_online_action(cpu));
 		break;
 	case CPU_DOWN_PREPARE:
 	case CPU_DOWN_PREPARE_FROZEN:
-		ret = avp_cpu_offline_action(cpu);
+		ret = notifier_from_errno(avp_cpu_offline_action(cpu));
 		break;
 	default:
 		ret = NOTIFY_OK;
@@ -565,6 +560,8 @@ avp_cpu_hotplug_callback(struct notifier_block *nfb,
 static struct notifier_block avp_cpu_hotplug_notifier = {
 	.notifier_call = avp_cpu_hotplug_callback,
 };
+#endif
+
 #endif
 
 
@@ -594,20 +591,19 @@ avp_dev_free(struct avp_dev *dev)
 	if (!dev)
 		return -ENODEV;
 
-    if (dev->stats) {
+	if (dev->stats) {
 		free_percpu(dev->stats);
 		dev->stats = NULL;
 	}
 
 	avp_dev_flush_cache(dev);
 
-    if (dev->net_dev) {
-        unregister_netdev(dev->net_dev);
-        free_netdev(dev->net_dev);
-        dev->net_dev = NULL;
-    }
+	if (dev->net_dev) {
+		unregister_netdev(dev->net_dev);
+		free_netdev(dev->net_dev);
+	}
 
-    return 0;
+	return 0;
 }
 
 /* lookup an AVP device by unique device id */
@@ -651,10 +647,10 @@ avp_dev_validate(struct rte_avp_device_info *info)
 
 /*
  * During VM live migrations it is necessary to detach the AVP device from its
- * (host-provided) memory.	This is because the contents and layout of the
- * memory will change as the VM is migrated to a new host.	This function
+ * (host-provided) memory. This is because the contents and layout of the
+ * memory will change as the VM is migrated to a new host. This function
  * essentially stops the net_device but does not remove it from the system so
- * that applications are not impacted beyond minimal message loss.	After the
+ * that applications are not impacted beyond minimal message loss. After the
  * migration the device will be re-attached to its memory.
  */
 int
@@ -669,7 +665,7 @@ avp_dev_detach(struct avp_dev *avp)
 	}
 
 	AVP_INFO("detaching netdev %s from device 0x%llx\n",
-			 net_dev->name, avp->device_id);
+			net_dev->name, avp->device_id);
 
 	/* update status */
 	avp->status = WRS_AVP_DEV_STATUS_DETACHED;
@@ -808,8 +804,8 @@ avp_dev_configure(struct avp_dev *avp, struct rte_avp_device_info *dev_info)
 
 	rtnl_lock();
 	/* inform the stack of our actual number of in use queues
-	 *	note:  when setting rx/tx queue counts on netdevices that are already
-	 *		   registered (i.e., live migration) we need to hold the RTNL lock.
+	 * note: when setting rx/tx queue counts on netdevices that are already
+	 * registered (i.e., live migration) we need to hold the RTNL lock.
 	 */
 	netif_set_real_num_tx_queues(avp->net_dev, avp->num_tx_queues);
 	netif_set_real_num_rx_queues(avp->net_dev, avp->num_rx_queues);
@@ -1008,7 +1004,7 @@ _avp_dev_release(struct avp_dev *dev)
 		avp_thread_dev_remove(dev);
 	}
 
-    /* remove the device from the response polling list */
+	/* remove the device from the response polling list */
 	down_write(&avp_poll_lock);
 	list_del(&dev->poll);
 	up_write(&avp_poll_lock);
@@ -1018,10 +1014,10 @@ _avp_dev_release(struct avp_dev *dev)
 	list_del(&dev->list);
 	up_write(&avp_list_lock);
 
-    /* delete and free netdev object */
-    avp_dev_free(dev);
+	/* delete and free netdev object */
+	avp_dev_free(dev);
 
-    return 0;
+	return 0;
 }
 
 int
@@ -1335,23 +1331,47 @@ avp_init(void)
 	ret = avp_thread_init();
 	if (ret != 0) {
 		AVP_ERR("Failed to initialize threads\n");
-		return ret;
+		goto out_dereg;
 	}
 
 #ifdef CONFIG_HOTPLUG_CPU
-	register_hotcpu_notifier(&avp_cpu_hotplug_notifier);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0)
+	ret = register_hotcpu_notifier(&avp_cpu_hotplug_notifier);
+#else
+	ret = cpuhp_setup_state_nocalls(CPUHP_AP_ONLINE_DYN,
+				"net/wrs_avp:online",
+				avp_cpu_online_action,
+				avp_cpu_offline_action);
+#endif
+	if (ret < 0) {
+		AVP_ERR("Failed to setup cpu hotplug\n");
+		goto out_dereg;
+	}
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
+	avp_cpuhp_state = ret;
+#endif
 #endif
 
 	/* Setup guest PCI driver */
 	ret = avp_pci_init();
 	if (ret != 0) {
 		AVP_ERR("Failed to register PCI driver\n");
-		return ret;
+		goto out_cpuhp;
 	}
 
 	AVP_PRINT("######## DPDK AVP module loaded	########\n");
 
 	return 0;
+
+out_cpuhp:
+#ifdef CONFIG_HOTPLUG_CPU
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
+	cpuhp_remove_state_nocalls(avp_cpuhp_state);
+#endif
+#endif
+out_dereg:
+	misc_deregister(&avp_misc);
+	return ret;
 }
 
 static void __exit
@@ -1360,7 +1380,11 @@ avp_exit(void)
 	AVP_PRINT("####### DPDK AVP module unloading  #######\n");
 
 #ifdef CONFIG_HOTPLUG_CPU
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0)
 	unregister_hotcpu_notifier(&avp_cpu_hotplug_notifier);
+#else
+	cpuhp_remove_state_nocalls(avp_cpuhp_state);
+#endif
 #endif
 
 	avp_pci_exit();
@@ -1372,8 +1396,8 @@ module_init(avp_init);
 module_exit(avp_exit);
 
 module_param(kthread_cpulist, charp, S_IRUGO);
-MODULE_PARM_DESC(kthread_cpulist, "Kernel thread cpu list (default all)\n");
+MODULE_PARM_DESC(kthread_cpulist, "Kernel thread cpu list (default all)");
 module_param(kthread_policy, int, S_IRUGO);
-MODULE_PARM_DESC(kthread_policy, "Kernel thread scheduling policy\n");
+MODULE_PARM_DESC(kthread_policy, "Kernel thread scheduling policy");
 module_param(kthread_priority, int, S_IRUGO);
-MODULE_PARM_DESC(kthread_priority, "Kernel thread scheduling priority\n");
+MODULE_PARM_DESC(kthread_priority, "Kernel thread scheduling priority");
