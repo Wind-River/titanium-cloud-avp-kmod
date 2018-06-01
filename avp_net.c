@@ -507,7 +507,7 @@ avp_net_change_mtu(struct net_device *dev, int new_mtu)
 	return 0;
 }
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 11, 0)
+#if ((LINUX_VERSION_CODE < KERNEL_VERSION(4, 11, 0)) && !(defined(HAVE_VOID_NDO_GET_STATS64)))
 static struct rtnl_link_stats64 *
 #else
 static void
@@ -554,7 +554,7 @@ avp_net_stats(struct net_device *dev, struct rtnl_link_stats64 *tot)
 		tot->tx_fifo_errors += tx_fifo_errors;
 	}
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 11, 0)
+#if ((LINUX_VERSION_CODE < KERNEL_VERSION(4, 11, 0)) && !(defined(HAVE_VOID_NDO_GET_STATS64)))
 	return tot;
 #endif
 }
@@ -602,7 +602,11 @@ static const struct net_device_ops avp_net_netdev_ops = {
 	.ndo_stop = avp_net_release,
 	.ndo_set_config = avp_net_config,
 	.ndo_start_xmit = avp_net_tx,
-	.ndo_change_mtu = avp_net_change_mtu,
+#ifdef HAVE_RHEL7_EXTENDED_MIN_MAX_MTU
+	.ndo_change_mtu_rh74 = avp_net_change_mtu,
+#else
+	.ndo_change_mtu= avp_net_change_mtu,
+#endif
 	.ndo_get_stats64 = avp_net_stats,
 #ifdef WRS_AVP_TX_TIMEOUTS
 	.ndo_tx_timeout = avp_net_tx_timeout,
