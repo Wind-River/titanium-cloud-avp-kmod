@@ -44,8 +44,19 @@ typedef phys_addr_t rte_iova_t;
 #endif
 
 #if (RHEL_RELEASE_CODE && (RHEL_RELEASE_CODE >= RHEL_RELEASE_VERSION(7,5)))
-#define HAVE_RHEL7_EXTENDED_MIN_MAX_MTU
 #define HAVE_VOID_NDO_GET_STATS64
+#endif
+
+/*
+ * RHEL has two different versions with different kernel versions:
+ * 3.10 is for AMD, Intel, IBM POWER7 and POWER8;
+ * 4.14 is for ARM and IBM POWER9
+ */
+#if (defined(RHEL_RELEASE_CODE) && \
+	(RHEL_RELEASE_CODE >= RHEL_RELEASE_VERSION(7, 5)) && \
+	(RHEL_RELEASE_CODE < RHEL_RELEASE_VERSION(8, 0)) && \
+	(LINUX_VERSION_CODE < KERNEL_VERSION(4, 14, 0)))
+#define ndo_change_mtu ndo_change_mtu_rh74
 #endif
 
 #else
