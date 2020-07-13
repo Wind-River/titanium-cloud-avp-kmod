@@ -602,11 +602,7 @@ static const struct net_device_ops avp_net_netdev_ops = {
 	.ndo_stop = avp_net_release,
 	.ndo_set_config = avp_net_config,
 	.ndo_start_xmit = avp_net_tx,
-#ifdef HAVE_RHEL7_EXTENDED_MIN_MAX_MTU
-	.ndo_change_mtu_rh74 = avp_net_change_mtu,
-#else
-	.ndo_change_mtu= avp_net_change_mtu,
-#endif
+	.ndo_change_mtu = avp_net_change_mtu,
 	.ndo_get_stats64 = avp_net_stats,
 #ifdef WRS_AVP_TX_TIMEOUTS
 	.ndo_tx_timeout = avp_net_tx_timeout,
